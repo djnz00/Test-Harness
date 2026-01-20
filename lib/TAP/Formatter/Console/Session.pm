@@ -124,7 +124,8 @@ sub _closures {
             # is false - so it's safe to only set them here unless that
             # relationship changes.
 
-            if ( !$plan ) {
+            if ( !$plan || ( $plan eq '/? ' && defined $parser->tests_planned ) )
+            {
                 my $planned = $parser->tests_planned || '?';
                 $plan = "/$planned ";
             }
