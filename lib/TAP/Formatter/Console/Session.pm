@@ -99,6 +99,16 @@ sub _closures {
     my $newline_printed = 0;
 
     my $last_status_printed = 0;
+    my $last_seen_test      = 0;
+    my $last_printed_test   = 0;
+
+    my $print_status = sub {
+        my ( $number, $now ) = @_;
+        $output = $formatter->_get_output_method($parser);
+        $formatter->$output("\r$pretty$number$plan");
+        $last_status_printed = $now;
+        $last_printed_test   = $number;
+    };
 
     return {
         header => sub {
@@ -129,18 +139,22 @@ sub _closures {
                 $plan = "/$planned ";
             }
 
-            if ( $show_count and $is_test ) {
-                my $now    = CORE::time;
+            if ( $show_count ) {
+                my $now = CORE::time;
 
-                # Print status roughly once per second.
-                # We will always get the first number as a side effect of
-                # $last_status_printed starting with the value 0, which $now
-                # will never be. (Unless someone sets their clock to 1970)
-                if ( $last_status_printed != $now ) {
-                    my $number = $result->number;
-                    $output = $formatter->_get_output_method($parser);
-                    $formatter->$output("\r$pretty$number$plan");
-                    $last_status_printed = $now;
+                if ( $is_test ) {
+                    $last_seen_test = $result->number;
+
+                    # Print status roughly once per second.
+                    # We will always get the first number as a side effect of
+                    # $last_status_printed starting with the value 0, which $now
+                    # will never be. (Unless someone sets their clock to 1970)
+                    if ( $last_status_printed != $now ) {
+                        $print_status->( $last_seen_test, $now );
+                    }
+                }
+                elsif ( $last_seen_test > $last_printed_test ) {
+                    $print_status->( $last_seen_test, $now );
                 }
             }
 
