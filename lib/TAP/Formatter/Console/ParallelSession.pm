@@ -29,9 +29,10 @@ sub _initialize {
 sub _create_shared_context {
     my $self = shift;
     return {
-        active => [],
-        tests  => 0,
-        fails  => 0,
+        active        => [],
+        tests         => 0,
+        fails         => 0,
+        ruler_active  => 0,
     };
 }
 
@@ -110,6 +111,70 @@ sub _output_ruler {
         $ruler .= '=' x ( WIDTH - length($ruler) );
     }
     $formatter->_output("\r$ruler");
+    $context->{ruler_active} = 1;
+}
+
+sub _expand_subtest {
+    my ( $self, $result, $context ) = @_;
+    my $formatter = $self->formatter;
+    return if $formatter->really_quiet;
+    return if $formatter->verbose;
+
+    my $expand = $formatter->expand;
+    return unless $expand;
+
+    my $state = $self->{_subtest_expand};
+    if ( !$state || $state->{max_depth} != $expand ) {
+        require TAP::Formatter::Console::Subtest;
+        $state = $self->{_subtest_expand} = {
+            max_depth => $expand,
+            parser    => TAP::Formatter::Console::Subtest->new(
+                { max_depth => $expand } ),
+            longest => [],
+            output_started => 0,
+        };
+    }
+
+    my @events = $state->{parser}->consume_line( $result->raw );
+    return unless @events;
+
+    for my $event (@events) {
+        my $depth = $event->{depth};
+        my $name  = $event->{name};
+        my $len   = length $name;
+        $state->{longest}[$depth] = $len
+          if !defined $state->{longest}[$depth]
+          || $len > $state->{longest}[$depth];
+        my $periods
+          = '.' x ( $state->{longest}[$depth] + 2 - $len );
+        my $pretty = ( '  ' x $depth ) . $name . $periods . ' ';
+        my $text
+          = $event->{type} eq 'progress'
+          ? $pretty . $event->{run} . '/' . $event->{planned}
+          : $pretty . ( $event->{ok} ? 'ok' : 'not ok' );
+
+        if ( $context->{ruler_active} ) {
+            $formatter->_output("\n");
+            $context->{ruler_active} = 0;
+        }
+        if ( $event->{type} eq 'final' && $formatter->can('_set_colors') ) {
+            my $status = $event->{ok} ? 'ok' : 'not ok';
+            my $color  = $event->{ok}
+              ? $formatter->_success_color
+              : $formatter->_failure_color;
+            $formatter->_output($pretty);
+            $formatter->_set_colors($color);
+            $formatter->_output($status);
+            $formatter->_set_colors('reset');
+        }
+        else {
+            $formatter->_output($text);
+        }
+        $formatter->_output("\n");
+        $state->{output_started} = 1;
+    }
+
+    return;
 }
 
 =head3 C<result>
@@ -121,21 +186,23 @@ sub _output_ruler {
 sub result {
     my ( $self, $result ) = @_;
     my $formatter = $self->formatter;
+    my $context   = $shared{$formatter};
+    my $active    = $context->{active};
 
     # my $really_quiet = $formatter->really_quiet;
     # my $show_count   = $self->_should_show_count;
 
+    if ( @$active == 1 ) {
+        $context->{tests}++ if $result->is_test;
+
+        # There is only one test, so use the serial output format.
+        return $self->SUPER::result($result);
+    }
+
+    $self->_expand_subtest( $result, $context );
+
     if ( $result->is_test ) {
-        my $context = $shared{$formatter};
         $context->{tests}++;
-
-        my $active = $context->{active};
-        if ( @$active == 1 ) {
-
-            # There is only one test, so use the serial output format.
-            return $self->SUPER::result($result);
-        }
-
         $self->_output_ruler( $self->parser->tests_run == 1 );
     }
     elsif ( $result->is_bailout ) {

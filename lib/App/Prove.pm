@@ -53,7 +53,7 @@ my @ATTR;
 
 BEGIN {
     @ATTR = qw(
-      archive argv blib show_count color directives exec failures comments
+      archive argv blib show_count expand color directives exec failures comments
       formatter harness includes modules plugins jobs lib merge parse quiet
       really_quiet recurse backwards shuffle taint_fail taint_warn timer
       verbose warnings_fail warnings_warn show_help show_man show_version
@@ -206,6 +206,13 @@ sub process_args {
             'color!'     => \$self->{color},
             'colour!'    => \$self->{color},
             'count!'     => \$self->{show_count},
+            'x'          => sub { $self->{expand} = 1; },
+            'expand=i'   => sub {
+                my ( $opt, $val ) = @_;
+                croak '--expand expects a positive integer'
+                  unless defined $val && $val > 0;
+                $self->{expand} = $val;
+            },
             'c'          => \$self->{color},
             'D|dry'      => \$self->{dry},
             'ext=s@'     => sub {
@@ -299,6 +306,9 @@ sub _get_args {
     }
     else {
         $args{show_count} = $self->show_count;
+    }
+    if ( defined $self->expand ) {
+        $args{expand} = $self->expand;
     }
 
     if ( $self->archive ) {
@@ -685,6 +695,8 @@ calling C<run>.
 =item C<failures>
 
 =item C<comments>
+
+=item C<expand>
 
 =item C<formatter>
 

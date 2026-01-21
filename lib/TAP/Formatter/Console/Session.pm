@@ -91,16 +91,36 @@ sub _closures {
     my $directives   = $formatter->directives;
     my $failures     = $formatter->failures;
     my $comments     = $formatter->comments;
+    my $expand       = $formatter->expand;
 
     my $output_result = $self->_get_output_result;
 
     my $output          = '_output';
     my $plan            = '';
     my $newline_printed = 0;
+    my $subtest_output_started = 0;
 
     my $last_status_printed = 0;
     my $last_seen_test      = 0;
     my $last_printed_test   = 0;
+
+    my $subtest_state;
+
+    if ( $expand && !$verbose ) {
+        require TAP::Formatter::Console::Subtest;
+        $subtest_state = $self->{_subtest_expand};
+        if ( !$subtest_state || $subtest_state->{max_depth} != $expand ) {
+            $subtest_state = {
+                max_depth => $expand,
+                parser    => TAP::Formatter::Console::Subtest->new(
+                    { max_depth => $expand } ),
+                longest       => [],
+                output_started => 0,
+            };
+            $self->{_subtest_expand} = $subtest_state;
+        }
+        $subtest_output_started = $subtest_state->{output_started} || 0;
+    }
 
     my $print_status = sub {
         my ( $number, $now ) = @_;
@@ -108,6 +128,67 @@ sub _closures {
         $formatter->$output("\r$pretty$number$plan");
         $last_status_printed = $now;
         $last_printed_test   = $number;
+    };
+
+    my $format_subtest_name = sub {
+        my ( $depth, $name ) = @_;
+        my $len = length $name;
+        my $longest = $subtest_state->{longest};
+        $longest->[$depth] = $len
+          if !defined $longest->[$depth] || $len > $longest->[$depth];
+        my $periods = '.' x ( $longest->[$depth] + 2 - $len );
+        return ( '  ' x $depth ) . $name . $periods . ' ';
+    };
+
+    my $start_subtest_output = sub {
+        unless ($newline_printed) {
+            $formatter->_output("\n");
+            $newline_printed = 1;
+        }
+        $subtest_output_started = 1;
+        $subtest_state->{output_started} = 1 if $subtest_state;
+    };
+
+    my $emit_subtest_progress = sub {
+        my ($text) = @_;
+        $start_subtest_output->();
+        my $len = length $text;
+        my $pad = '';
+        if ( defined $subtest_state->{last_len}
+            && $len < $subtest_state->{last_len} )
+        {
+            $pad = ' ' x ( $subtest_state->{last_len} - $len );
+        }
+        $formatter->_output("\r$text$pad");
+        $subtest_state->{last_len} = $len;
+        $subtest_state->{progress_active} = 1;
+    };
+
+    my $emit_subtest_final = sub {
+        my ( $pretty, $ok ) = @_;
+        $start_subtest_output->();
+        my $status = $ok ? 'ok' : 'not ok';
+        my $text   = $pretty . $status;
+        my $len    = length $text;
+        my $pad = '';
+        if ( defined $subtest_state->{last_len}
+            && $len < $subtest_state->{last_len} )
+        {
+            $pad = ' ' x ( $subtest_state->{last_len} - $len );
+        }
+        $formatter->_output("\r$pretty");
+        if ( $formatter->can('_set_colors') ) {
+            my $color = $ok
+              ? $formatter->_success_color
+              : $formatter->_failure_color;
+            $formatter->_set_colors($color);
+        }
+        $formatter->_output($status);
+        $formatter->_set_colors('reset') if $formatter->can('_set_colors');
+        $formatter->_output($pad);
+        $formatter->_output("\n");
+        $subtest_state->{last_len}        = undef;
+        $subtest_state->{progress_active} = 0;
     };
 
     return {
@@ -140,7 +221,30 @@ sub _closures {
                 $plan = "/$planned ";
             }
 
-            if ( $show_count ) {
+            if ($subtest_state) {
+                my @events
+                  = $subtest_state->{parser}->consume_line( $result->raw );
+                for my $event (@events) {
+                    if ( $event->{type} eq 'progress' ) {
+                        my $pretty
+                          = $format_subtest_name->( $event->{depth},
+                            $event->{name} );
+                        $emit_subtest_progress->(
+                            $pretty
+                              . $event->{run} . '/'
+                              . $event->{planned}
+                        );
+                    }
+                    elsif ( $event->{type} eq 'final' ) {
+                        my $pretty
+                          = $format_subtest_name->( $event->{depth},
+                            $event->{name} );
+                        $emit_subtest_final->( $pretty, $event->{ok} );
+                    }
+                }
+            }
+
+            if ( $show_count && !$subtest_output_started ) {
                 my $now = CORE::time;
 
                 if ( $is_test ) {

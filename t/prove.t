@@ -82,7 +82,7 @@ BEGIN {    # START PLAN
 
     # list of attributes
     @ATTR = qw(
-      archive argv blib color directives exec extensions failures
+      archive argv blib color directives exec expand extensions failures
       formatter harness includes lib merge parse quiet really_quiet
       recurse backwards shuffle taint_fail taint_warn verbose
       warnings_fail warnings_warn
@@ -1575,4 +1575,3 @@ for my $test (@SCHEDULE) {
 
     }    # SKIP
 }
-
