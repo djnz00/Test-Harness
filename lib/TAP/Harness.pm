@@ -58,7 +58,7 @@ BEGIN {
 
     @FORMATTER_ARGS = qw(
       directives verbosity timer failures comments errors stdout color
-      show_count normalize
+      show_count expand normalize
     );
 
     %VALIDATION_FOR = (

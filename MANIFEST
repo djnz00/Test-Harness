@@ -24,6 +24,7 @@ lib/TAP/Formatter/Color.pm
 lib/TAP/Formatter/Console.pm
 lib/TAP/Formatter/Console/ParallelSession.pm
 lib/TAP/Formatter/Console/Session.pm
+lib/TAP/Formatter/Console/Subtest.pm
 lib/TAP/Formatter/File.pm
 lib/TAP/Formatter/File/Session.pm
 lib/TAP/Formatter/Session.pm
@@ -92,6 +93,7 @@ t/data/proverc
 t/data/sample.yml
 t/env_opts.t
 t/errors.t
+t/expand-subtests.t
 t/file.t
 t/glob-to-regexp.t
 t/grammar.t
@@ -172,6 +174,7 @@ t/sample-tests/simple
 t/sample-tests/simple_fail
 t/sample-tests/simple_yaml
 t/sample-tests/simple_yaml_missing_version13
+t/sample-tests/subtest_expand
 t/sample-tests/skip
 t/sample-tests/skip_nomsg
 t/sample-tests/skipall
