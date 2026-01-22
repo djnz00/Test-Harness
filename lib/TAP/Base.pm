@@ -130,4 +130,14 @@ as with L<perlfunc/times>.
 
 sub get_times { return [ times() ] }
 
+sub _format_time_ms {
+    my ( $self, $seconds ) = @_;
+
+    return '0ms' unless defined $seconds;
+    return '0ms' if $seconds == 0;
+
+    my $ms = int( $seconds * 1000 + ( $seconds >= 0 ? 0.5 : -0.5 ) );
+    return $ms ? "$ms" . 'ms' : '<1ms';
+}
+
 1;

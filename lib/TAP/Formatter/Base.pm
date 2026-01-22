@@ -21,6 +21,8 @@ BEGIN {
         jobs       => sub { shift; shift },
         show_count => sub { shift; shift },
         expand     => sub { shift; shift },
+        poll       => sub { shift; shift },
+        utf        => sub { shift; shift },
         stdout     => sub {
             my ( $self, $ref ) = @_;
 
@@ -103,6 +105,14 @@ sub _initialize {
     if ( $self->color ) {
         require TAP::Formatter::Color;
         $self->_colorizer( TAP::Formatter::Color->new );
+    }
+
+    my $interactive = $self->_is_interactive;
+    if ( !defined $self->poll && $interactive ) {
+        $self->poll(100);
+    }
+    if ( !defined $self->utf ) {
+        $self->utf(1);
     }
 
     return $self;
@@ -265,6 +275,15 @@ sub open_test {
     die "Unimplemented.";
 }
 
+sub tick {
+    return;
+}
+
+sub _is_interactive {
+    my $self = shift;
+    return -t $self->stdout && !$ENV{HARNESS_NOTTY};
+}
+
 sub _output_success {
     my ( $self, $msg ) = @_;
     $self->_output($msg);
@@ -289,7 +308,26 @@ sub summary {
     my @t     = $aggregate->descriptions;
     my $tests = \@t;
 
-    my $runtime = $aggregate->elapsed_timestr;
+    my $elapsed = $aggregate->elapsed;
+    my ( $real, $usr, $sys ) = @{$elapsed}[ 0 .. 2 ];
+    if ( $aggregate->can('wallclock_elapsed') ) {
+        my $wallclock = $aggregate->wallclock_elapsed;
+        $real = $wallclock if defined $wallclock;
+    }
+    my $wall = $self->_format_time_ms($real);
+    my $usr_ms = $self->_format_time_ms($usr);
+    my $sys_ms = $self->_format_time_ms($sys);
+    my $cpu_ms = $self->_format_time_ms( $usr + $sys );
+    my @runtime_parts = (
+        { kind => 'ms',   text => $wall },
+        { kind => 'text', text => ' wallclock (' },
+        { kind => 'ms',   text => $usr_ms },
+        { kind => 'text', text => ' usr + ' },
+        { kind => 'ms',   text => $sys_ms },
+        { kind => 'text', text => ' sys = ' },
+        { kind => 'ms',   text => $cpu_ms },
+        { kind => 'text', text => ' CPU)' },
+    );
 
     my $total  = $aggregate->total;
     my $passed = $aggregate->passed;
@@ -361,8 +399,23 @@ sub summary {
         }
     }
     my $files = @$tests;
-    $self->_output("Files=$files, Tests=$total, $runtime\n");
+    $self->_summary_runtime_line( $files, $total, \@runtime_parts );
     my $status = $aggregate->get_status;
+    $self->_output_result_status($status);
+}
+
+sub _summary_runtime_line {
+    my ( $self, $files, $total, $runtime ) = @_;
+    if ( ref $runtime eq 'ARRAY' ) {
+        my $text = join '', map { $_->{text} } @{$runtime};
+        $self->_output("Files=$files, Tests=$total, $text\n");
+        return;
+    }
+    $self->_output("Files=$files, Tests=$total, $runtime\n");
+}
+
+sub _output_result_status {
+    my ( $self, $status ) = @_;
     $self->_output("Result: $status\n");
 }
 

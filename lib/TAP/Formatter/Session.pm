@@ -114,12 +114,46 @@ sub close_test { }
 
 sub clear_for_close { }
 
+sub tick { }
+
+sub time_report_parts {
+    my ( $self, $formatter, $parser ) = @_;
+
+    my @parts;
+    if ( $formatter->timer ) {
+        my $start_time = $parser->start_time;
+        my $end_time   = $parser->end_time;
+        if ( defined $start_time and defined $end_time ) {
+            my $elapsed = $end_time - $start_time;
+            push @parts,
+              { kind => 'text', text => ' ' },
+              { kind => 'ms',   text => $self->_format_time_ms($elapsed) };
+        }
+        my $start_times = $parser->start_times();
+        my $end_times   = $parser->end_times();
+        if ( $start_times and $end_times ) {
+            my $usr = $end_times->[0] - $start_times->[0];
+            my $sys = $end_times->[1] - $start_times->[1];
+            my $cpu = $usr + $sys;
+            push @parts,
+              { kind => 'text', text => ' (' },
+              { kind => 'ms',   text => $self->_format_time_ms($usr) },
+              { kind => 'text', text => ' usr + ' },
+              { kind => 'ms',   text => $self->_format_time_ms($sys) },
+              { kind => 'text', text => ' sys = ' },
+              { kind => 'ms',   text => $self->_format_time_ms($cpu) },
+              { kind => 'text', text => ' CPU)' };
+        }
+    }
+
+    return @parts;
+}
+
 sub _should_show_count {
     my $self = shift;
     return
          !$self->formatter->verbose
-      && -t $self->formatter->stdout
-      && !$ENV{HARNESS_NOTTY};
+      && $self->formatter->_is_interactive;
 }
 
 sub _format_for_output {
@@ -191,30 +225,8 @@ sub _make_ok_line {
 sub time_report {
     my ( $self, $formatter, $parser ) = @_;
 
-    my @time_report;
-    if ( $formatter->timer ) {
-        my $start_time = $parser->start_time;
-        my $end_time   = $parser->end_time;
-        if ( defined $start_time and defined $end_time ) {
-            my $elapsed = $end_time - $start_time;
-            push @time_report,
-              $self->time_is_hires
-                ? sprintf( ' %8d ms', $elapsed * 1000 )
-                : sprintf( ' %8s s', $elapsed || '<1' );
-        }
-        my $start_times = $parser->start_times();
-        my $end_times   = $parser->end_times();
-        my $usr  = $end_times->[0] - $start_times->[0];
-        my $sys  = $end_times->[1] - $start_times->[1];
-        my $cusr = $end_times->[2] - $start_times->[2];
-        my $csys = $end_times->[3] - $start_times->[3];
-        push @time_report,
-          sprintf('(%5.2f usr %5.2f sys + %5.2f cusr %5.2f csys = %5.2f CPU)',
-                  $usr, $sys, $cusr, $csys,
-                  $usr + $sys + $cusr + $csys);
-    }
-
-    return "@time_report";
+    my @parts = $self->time_report_parts( $formatter, $parser );
+    return join '', map { $_->{text} } @parts;
 }
 
 1;

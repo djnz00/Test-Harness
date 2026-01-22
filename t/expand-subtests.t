@@ -35,18 +35,21 @@ my $out = run_prove($sample);
 unlike( $out, qr/^  outer\b/m, 'no expanded subtests without -x' );
 
 $out = run_prove( '-x', $sample );
-like( $out, qr/^  outer\b.*\bok\b/m, 'expanded top-level subtest' );
+my $ok_token = qr/(?:\x{2713}|\xE2\x9C\x93)/;
+like( $out, qr/^  outer\b.*$ok_token/m, 'expanded top-level subtest' );
 like( $out, qr/^  outer\b.*1\/2/m, 'subtest progress shown' );
 unlike( $out, qr/^    inner\b/m, 'nested subtest suppressed at depth 1' );
 
 $out = run_prove( '--expand', '2', $sample );
-like( $out, qr/^  outer\b.*\bok\b/m, 'expanded top-level subtest at depth 2' );
-like( $out, qr/\s+inner\b.*\bok\b/m, 'expanded nested subtest at depth 2' );
+like( $out, qr/^  outer\b.*$ok_token/m,
+    'expanded top-level subtest at depth 2' );
+like( $out, qr/\s+inner\b.*$ok_token/m,
+    'expanded nested subtest at depth 2' );
 
 $out = run_prove( '-x', '-v', $sample );
 unlike( $out, qr/^  outer\b.*\.+/m, 'no expanded lines with -v' );
 
 $out = run_prove( '-x', '-j2', $sample, $simple );
-like( $out, qr/^  outer\b.*\bok\b/m, 'expanded subtest in parallel mode' );
+like( $out, qr/^  outer\b.*$ok_token/m, 'expanded subtest in parallel mode' );
 
 done_testing;

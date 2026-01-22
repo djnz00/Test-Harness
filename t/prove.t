@@ -83,8 +83,8 @@ BEGIN {    # START PLAN
     # list of attributes
     @ATTR = qw(
       archive argv blib color directives exec expand extensions failures
-      formatter harness includes lib merge parse quiet really_quiet
-      recurse backwards shuffle taint_fail taint_warn verbose
+      formatter harness includes lib merge parse poll quiet really_quiet
+      recurse backwards shuffle taint_fail taint_warn utf verbose
       warnings_fail warnings_warn
     );
 
@@ -139,6 +139,8 @@ BEGIN {    # START PLAN
                 verbose       => 21,
                 warnings_fail => 22,
                 warnings_warn => 23,
+                poll          => 24,
+                utf           => 25,
             },
             expect => {
                 archive       => 1,
@@ -164,6 +166,8 @@ BEGIN {    # START PLAN
                 verbose       => 21,
                 warnings_fail => 22,
                 warnings_warn => 23,
+                poll          => 24,
+                utf           => 25,
             }
         },
         {   name   => 'Call with defaults',
@@ -727,6 +731,88 @@ BEGIN {    # START PLAN
             runlog => [
                 [   '_runtests',
                     {   color      => 1,
+                        show_count => 1,
+                    },
+                    $dummy_test
+                ]
+            ],
+        },
+
+        {   name => 'Switch --poll=100',
+            args => {
+                argv => [qw( one two three )],
+            },
+            switches => [ '--poll=100', $dummy_test ],
+            expect   => { poll => 100 },
+            runlog   => [
+                [   '_runtests',
+                    {   poll       => 100,
+                        show_count => 1,
+                    },
+                    $dummy_test
+                ]
+            ],
+        },
+
+        {   name => 'Switch --poll=1000',
+            args => {
+                argv => [qw( one two three )],
+            },
+            switches => [ '--poll=1000', $dummy_test ],
+            expect   => { poll => 1000 },
+            runlog   => [
+                [   '_runtests',
+                    {   poll       => 1000,
+                        show_count => 1,
+                    },
+                    $dummy_test
+                ]
+            ],
+        },
+
+        {   name        => 'Switch --poll=0 (invalid)',
+            args        => { argv => [qw( one two three )] },
+            switches    => [ '--poll=0', $dummy_test ],
+            parse_error => qr/--poll expects a positive integer \(milliseconds\)/,
+        },
+
+        {   name        => 'Switch --poll=-1 (invalid)',
+            args        => { argv => [qw( one two three )] },
+            switches    => [ '--poll=-1', $dummy_test ],
+            parse_error => qr/--poll expects a positive integer \(milliseconds\)/,
+        },
+
+        {   name        => 'Switch --poll=abc (invalid)',
+            args        => { argv => [qw( one two three )] },
+            switches    => [ '--poll=abc', $dummy_test ],
+            parse_error => qr/--poll expects a positive integer \(milliseconds\)/,
+        },
+
+        {   name => 'Switch --noutf',
+            args => {
+                argv => [qw( one two three )],
+            },
+            switches => [ '--noutf', $dummy_test ],
+            expect   => { utf => 0 },
+            runlog   => [
+                [   '_runtests',
+                    {   utf        => 0,
+                        show_count => 1,
+                    },
+                    $dummy_test
+                ]
+            ],
+        },
+
+        {   name => 'Switch --utf',
+            args => {
+                argv => [qw( one two three )],
+            },
+            switches => [ '--utf', $dummy_test ],
+            expect   => { utf => 1 },
+            runlog   => [
+                [   '_runtests',
+                    {   utf        => 1,
                         show_count => 1,
                     },
                     $dummy_test
@@ -1468,6 +1554,7 @@ BEGIN {    # START PLAN
     ########################################################################
 
     my $extra_plan = 0;
+    my $tty_plan   = 1;
     for my $test (@SCHEDULE) {
         my $plan = 0;
         $plan += $test->{plan} || 0;
@@ -1477,7 +1564,7 @@ BEGIN {    # START PLAN
         $extra_plan += $plan;
     }
 
-    plan tests => @SCHEDULE * ( 3 + @ATTR ) + $extra_plan;
+    plan tests => @SCHEDULE * ( 3 + @ATTR ) + $extra_plan + $tty_plan;
 }    # END PLAN
 
 # ACTUAL TEST
@@ -1574,4 +1661,13 @@ for my $test (@SCHEDULE) {
         }
 
     }    # SKIP
+}
+
+SKIP: {
+    eval { require IO::Pty; 1 }
+      or skip 'IO::Pty not installed', 1;
+    require TAP::Formatter::Console;
+    my $pty = IO::Pty->new();
+    my $formatter = TAP::Formatter::Console->new( { stdout => $pty } );
+    is $formatter->poll, 100, 'default poll is 100ms on TTY';
 }

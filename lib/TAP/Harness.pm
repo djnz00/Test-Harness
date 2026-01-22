@@ -7,6 +7,7 @@ use Carp;
 use File::Spec;
 use File::Path;
 use IO::Handle;
+use IO::Select;
 
 use base 'TAP::Base';
 
@@ -58,7 +59,7 @@ BEGIN {
 
     @FORMATTER_ARGS = qw(
       directives verbosity timer failures comments errors stdout color
-      show_count expand normalize
+      show_count expand normalize poll utf
     );
 
     %VALIDATION_FOR = (
@@ -619,6 +620,13 @@ sub _aggregate_parallel {
 
     my $jobs = $self->jobs;
     my $mux  = $self->_construct( $self->multiplexer_class );
+    my $formatter = $self->formatter;
+    my $poll = $formatter->can('poll') ? $formatter->poll : undef;
+    my $tick = $formatter->can('tick') ? sub { $formatter->tick } : sub { };
+    my $timeout
+      = defined $poll && TAP::Parser::Multiplexer::SELECT_OK()
+      ? ( $poll / 1000 )
+      : undef;
 
     RESULT: {
 
@@ -638,7 +646,20 @@ sub _aggregate_parallel {
             $parser->start_times( $parser->get_times );
         }
 
-        if ( my ( $parser, $stash, $result ) = $mux->next ) {
+        my ( $parser, $stash, $result )
+          = defined $timeout ? $mux->next($timeout) : $mux->next;
+        if ( defined $timeout
+            && $mux->can('timed_out')
+            && $mux->timed_out
+            && $mux->parsers )
+        {
+            $tick->();
+            redo RESULT;
+        }
+        if ( $mux->can('select_error') && $mux->select_error ) {
+            croak 'Select error while polling: ' . $mux->select_error;
+        }
+        if ($parser) {
             my ( $session, $job ) = @$stash;
             if ( defined $result ) {
                 $session->result($result);
@@ -662,13 +683,40 @@ sub _aggregate_parallel {
 sub _aggregate_single {
     my ( $self, $aggregate, $scheduler ) = @_;
 
+    my $formatter = $self->formatter;
+    my $poll = $formatter->can('poll') ? $formatter->poll : undef;
+    my $tick = $formatter->can('tick') ? sub { $formatter->tick } : sub { };
+    my $timeout = defined $poll ? ( $poll / 1000 ) : undef;
+
     JOB:
     while ( my $job = $scheduler->get_job ) {
         next JOB if $job->is_spinner;
 
         my ( $parser, $session ) = $self->make_parser($job);
+        my $select;
+        if ( defined $timeout ) {
+            my @handles = $parser->get_select_handles;
+            $select = @handles ? IO::Select->new(@handles) : undef;
+        }
 
-        while ( defined( my $result = $parser->next ) ) {
+        while (1) {
+            if ($select) {
+                local $! = 0;
+                my @ready = $select->can_read($timeout);
+                if ( !@ready ) {
+                    next if $!{EINTR};
+                    if ($!) {
+                        $select = undef;
+                    }
+                    else {
+                        $tick->();
+                        next;
+                    }
+                }
+            }
+
+            my $result = $parser->next;
+            last unless defined $result;
             $session->result($result);
             if ( $result->is_bailout ) {
 

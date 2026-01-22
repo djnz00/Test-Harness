@@ -56,7 +56,7 @@ BEGIN {
       archive argv blib show_count expand color directives exec failures comments
       formatter harness includes modules plugins jobs lib merge parse quiet
       really_quiet recurse backwards shuffle taint_fail taint_warn timer
-      verbose warnings_fail warnings_warn show_help show_man show_version
+      poll utf verbose warnings_fail warnings_warn show_help show_man show_version
       state_class test_args state dry extensions ignore_exit rules state_manager
       normalize sources tapversion trap
       statefile
@@ -196,7 +196,7 @@ sub process_args {
         Getopt::Long::Configure(qw(no_ignore_case bundling pass_through));
 
         # Don't add coderefs to GetOptions
-        GetOptions(
+        my $ok = GetOptions(
             'v|verbose'  => \$self->{verbose},
             'f|failures' => \$self->{failures},
             'o|comments' => \$self->{comments},
@@ -213,6 +213,8 @@ sub process_args {
                   unless defined $val && $val > 0;
                 $self->{expand} = $val;
             },
+            'poll=s'     => sub { $self->_set_poll( $_[1] ) },
+            'utf!'       => \$self->{utf},
             'c'          => \$self->{color},
             'D|dry'      => \$self->{dry},
             'ext=s@'     => sub {
@@ -253,12 +255,26 @@ sub process_args {
             'rules=s@'     => $self->{rules},
             'tapversion=s' => \$self->{tapversion},
             'trap'         => \$self->{trap},
-        ) or croak('Unable to continue');
+        );
+        if ( my $err = delete $self->{_poll_error} ) {
+            croak $err;
+        }
+        $ok or croak('Unable to continue');
 
         # Stash the remainder of argv for later
         $self->{argv} = [@ARGV];
     }
 
+    return;
+}
+
+sub _set_poll {
+    my ( $self, $val ) = @_;
+    unless ( defined $val && $val =~ /\A\d+\z/ && $val > 0 ) {
+        $self->{_poll_error} = '--poll expects a positive integer (milliseconds)';
+        return;
+    }
+    $self->{poll} = $val;
     return;
 }
 
@@ -300,6 +316,12 @@ sub _get_args {
 
     if ( defined $self->color ? $self->color : $self->_color_default ) {
         $args{color} = 1;
+    }
+    if ( defined $self->poll ) {
+        $args{poll} = $self->poll;
+    }
+    if ( defined $self->utf ) {
+        $args{utf} = $self->utf;
     }
     if ( !defined $self->show_count ) {
         $args{show_count} = 1;
@@ -720,6 +742,10 @@ calling C<run>.
 
 =item C<quiet>
 
+=item C<poll>
+
+=item C<utf>
+
 =item C<really_quiet>
 
 =item C<recurse>
@@ -759,6 +785,15 @@ calling C<run>.
 =item C<trap>
 
 =back
+
+=head2 POLL AND UTF
+
+The C<poll> and C<utf> attributes are set via C<--poll=N> and
+C<--noutf>/C<--utf> on the command line. C<--poll> expects a positive
+integer in milliseconds and defaults to 100ms on a TTY when omitted;
+polling is disabled for non-TTY output unless explicitly set. UTF output
+defaults to enabled; use C<--noutf> to force ASCII. These options are
+CLI-only and are not read from C<HARNESS_OPTIONS>.
 
 =head1 PLUGINS
 

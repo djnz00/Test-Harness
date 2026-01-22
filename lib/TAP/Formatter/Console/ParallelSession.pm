@@ -33,7 +33,14 @@ sub _create_shared_context {
         tests         => 0,
         fails         => 0,
         ruler_active  => 0,
+        spinner_index => 0,
     };
+}
+
+sub active_sessions {
+    my ( $class, $formatter ) = @_;
+    my $context = $shared{$formatter};
+    return $context ? $context->{active} : [];
 }
 
 =head1 NAME
@@ -70,6 +77,20 @@ Output test preamble
 sub header {
 }
 
+sub tick {
+    my $self = shift;
+    my $formatter = $self->formatter;
+    my $context = $shared{$formatter} || return;
+
+    return unless $context->{ruler_active};
+    return unless $formatter->poll && $formatter->_is_interactive;
+
+    my $active = $context->{active} || [];
+    return unless @$active && $active->[0] == $self;
+
+    $self->_output_ruler( 1, 1 );
+}
+
 sub _clear_ruler {
     my $self = shift;
     $self->formatter->_output( "\r" . ( ' ' x WIDTH ) . "\r" );
@@ -82,7 +103,7 @@ my $trailer     = '... )===';
 my $chop_length = WIDTH - length $trailer;
 
 sub _output_ruler {
-    my ( $self, $refresh ) = @_;
+    my ( $self, $refresh, $advance_spinner ) = @_;
     my $new_now = time;
     return if $new_now == $now and !$refresh;
     $now = $new_now;
@@ -110,7 +131,28 @@ sub _output_ruler {
     else {
         $ruler .= '=' x ( WIDTH - length($ruler) );
     }
-    $formatter->_output("\r$ruler");
+    my $spinner = '';
+    if ( $formatter->poll && $formatter->_is_interactive ) {
+        my $frames = $formatter->_spinner_frames;
+        if (@$frames) {
+            if ($advance_spinner) {
+                $context->{spinner_index}
+                  = ( $context->{spinner_index} + 1 ) % @$frames;
+            }
+            $spinner = $frames->[ $context->{spinner_index} % @$frames ];
+        }
+    }
+
+    if ( length $spinner ) {
+        my $base = substr( $ruler, 0, -1 );
+        $formatter->_render_spinner_line(
+            text    => $base,
+            spinner => $spinner,
+        );
+    }
+    else {
+        $formatter->_render_spinner_line( text => $ruler );
+    }
     $context->{ruler_active} = 1;
 }
 
@@ -141,31 +183,26 @@ sub _expand_subtest {
     for my $event (@events) {
         my $depth = $event->{depth};
         my $name  = $event->{name};
-        my $len   = length $name;
-        $state->{longest}[$depth] = $len
-          if !defined $state->{longest}[$depth]
-          || $len > $state->{longest}[$depth];
-        my $periods
-          = '.' x ( $state->{longest}[$depth] + 2 - $len );
-        my $pretty = ( '  ' x $depth ) . $name . $periods . ' ';
+        my ( $pretty, $name_segments )
+          = $formatter->_subtest_name_data( $state, $depth, $name );
         my $text
           = $event->{type} eq 'progress'
           ? $pretty . $event->{run} . '/' . $event->{planned}
-          : $pretty . ( $event->{ok} ? 'ok' : 'not ok' );
+          : $pretty . $formatter->_status_token( $event->{ok} );
 
         if ( $context->{ruler_active} ) {
             $formatter->_output("\n");
             $context->{ruler_active} = 0;
         }
-        if ( $event->{type} eq 'final' && $formatter->can('_set_colors') ) {
-            my $status = $event->{ok} ? 'ok' : 'not ok';
+        if ( $event->{type} eq 'final' ) {
+            my $status = $formatter->_status_token( $event->{ok} );
             my $color  = $event->{ok}
               ? $formatter->_success_color
               : $formatter->_failure_color;
-            $formatter->_output($pretty);
-            $formatter->_set_colors($color);
-            $formatter->_output($status);
-            $formatter->_set_colors('reset');
+            $formatter->_render_segments(
+                @{$name_segments},
+                { text => $status, color => $color },
+            );
         }
         else {
             $formatter->_output($text);
@@ -203,7 +240,7 @@ sub result {
 
     if ( $result->is_test ) {
         $context->{tests}++;
-        $self->_output_ruler( $self->parser->tests_run == 1 );
+        $self->_output_ruler( $self->parser->tests_run == 1, 0 );
     }
     elsif ( $result->is_bailout ) {
         $formatter->_failure_output(
@@ -251,7 +288,7 @@ sub close_test {
     splice @$active, $pos[0], 1;
 
     if ( @$active > 1 ) {
-        $self->_output_ruler(1);
+        $self->_output_ruler( 1, 0 );
     }
     elsif ( @$active == 1 ) {
 
@@ -262,6 +299,12 @@ sub close_test {
 
         # $self->formatter->_output("\n");
         delete $shared{$formatter};
+        $formatter->_show_cursor if $formatter->can('_show_cursor');
+        if ( $formatter->{_current_session}
+            && $formatter->{_current_session} == $self )
+        {
+            $formatter->{_current_session} = undef;
+        }
     }
 }
 

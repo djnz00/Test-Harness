@@ -114,6 +114,16 @@ sub parsers {
     return $self->{count} + scalar @{ $self->{avid} };
 }
 
+sub timed_out {
+    my $self = shift;
+    return $self->{timed_out};
+}
+
+sub select_error {
+    my $self = shift;
+    return $self->{select_error};
+}
+
 sub _iter {
     my $self = shift;
 
@@ -122,6 +132,9 @@ sub _iter {
     my @ready = ();
 
     return sub {
+        my ($timeout) = @_;
+        $self->{timed_out} = 0;
+        $self->{select_error} = undef;
 
         # Drain all the non-selectable parsers first
         if (@$avid) {
@@ -133,8 +146,24 @@ sub _iter {
 
         until (@ready) {
             return unless $sel->count;
-            @ready = $sel->can_read;
-            last if @ready || !$!{EINTR};
+            if ( defined $timeout ) {
+                local $! = 0;
+                @ready = $sel->can_read($timeout);
+                if (@ready) {
+                    last;
+                }
+                next if $!{EINTR};
+                if ($!) {
+                    $self->{select_error} = $!;
+                    return;
+                }
+                $self->{timed_out} = 1;
+                return;
+            }
+            else {
+                @ready = $sel->can_read;
+                last if @ready || !$!{EINTR};
+            }
         }
 
         my ( $h, $parser, $stash, @handles ) = @{ shift @ready };
@@ -182,7 +211,7 @@ When all parsers are exhausted an empty list will be returned.
 
 sub next {
     my $self = shift;
-    return ( $self->{_iter} ||= $self->_iter )->();
+    return ( $self->{_iter} ||= $self->_iter )->(@_);
 }
 
 =head1 See Also

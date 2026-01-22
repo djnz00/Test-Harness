@@ -4,6 +4,11 @@ use strict;
 use warnings;
 use Benchmark;
 
+use constant GOT_TIME_HIRES => do {
+    eval 'use Time::HiRes qw(time);';
+    $@ ? 0 : 1;
+};
+
 use base 'TAP::Object';
 
 =head1 NAME
@@ -211,6 +216,7 @@ Among other times it records the start time for the test run.
 sub start {
     my $self = shift;
     $self->{start_time} = Benchmark->new;
+    $self->{wallclock_start} = time();
 }
 
 =head3 C<stop>
@@ -222,6 +228,7 @@ Call C<stop> immediately after adding all test results to the aggregator.
 sub stop {
     my $self = shift;
     $self->{end_time} = Benchmark->new;
+    $self->{wallclock_end} = time();
 }
 
 =head3 C<elapsed>
@@ -241,6 +248,21 @@ sub elapsed {
       q{Can't call elapsed without first calling start and then stop}
       unless defined $self->{start_time} && defined $self->{end_time};
     return timediff( $self->{end_time}, $self->{start_time} );
+}
+
+=head3 C<wallclock_elapsed>
+
+Returns the wall-clock elapsed time in seconds with millisecond
+precision when C<Time::HiRes> is available.
+
+=cut
+
+sub wallclock_elapsed {
+    my $self = shift;
+    return
+      unless defined $self->{wallclock_start}
+      && defined $self->{wallclock_end};
+    return $self->{wallclock_end} - $self->{wallclock_start};
 }
 
 =head3 C<elapsed_timestr>

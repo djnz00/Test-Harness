@@ -27,7 +27,7 @@ my $HARNESS = 'TAP::Harness';
 my $source_tests = 't/source_tests';
 my $sample_tests = 't/sample-tests';
 
-plan tests => 133;
+plan tests => 137;
 
 # note that this test will always pass when run through 'prove'
 ok $ENV{HARNESS_ACTIVE},  'HARNESS_ACTIVE env variable should be set';
@@ -66,6 +66,11 @@ is $@, '', '... and calling it with non-existent libs is fine';
 
 ok my $harness = $HARNESS->new,
   'Calling new() without arguments should succeed';
+
+is $harness->formatter->_format_time_ms(0), '0ms',
+  '... 0ms formatting is stable';
+is $harness->formatter->_format_time_ms(0.0004), '<1ms',
+  '... sub-millisecond formatting is stable';
 
 for my $test_args ( get_arg_sets() ) {
     my %args = %$test_args;
@@ -120,27 +125,27 @@ for my $test_args ( get_arg_sets() ) {
     chomp(@output);
 
     my @expected = (
-        "$source_tests/harness ..",
+        header_tokens( $harness, "$source_tests/harness" ),
         '1..1',
         '[[reset]]',
         'ok 1 - this is a test',
         '[[reset]]',
         '[[green]]',
-        'ok',
+        ok_token($harness),
         '[[reset]]',
         '[[green]]',
         'All tests successful.',
         '[[reset]]',
     );
-    my $status           = pop @output;
-    my $expected_status  = qr{^Result: PASS$};
-    my $summary          = pop @output;
-    my $expected_summary = qr{^Files=1, Tests=1, +\d+ wallclock secs};
+    my @status           = pop_status_tokens( \@output );
+    my @expected_status  = status_tokens( $harness, 'PASS' );
+    my @summary          = pop_summary_tokens( \@output );
+    my $expected_summary = summary_re( 1, 1 );
 
     is_deeply \@output, \@expected, '... and the output should be correct';
-    like $status, $expected_status,
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    like $summary, $expected_summary,
+    like summary_text( \@summary ), $expected_summary,
       '... and the report summary should look correct';
 
     # use an alias for test name
@@ -155,27 +160,27 @@ for my $test_args ( get_arg_sets() ) {
     chomp(@output);
 
     @expected = (
-        'My Nice Test ..',
+        header_tokens( $harness, 'My Nice Test' ),
         '1..1',
         '[[reset]]',
         'ok 1 - this is a test',
         '[[reset]]',
         '[[green]]',
-        'ok',
+        ok_token($harness),
         '[[reset]]',
         '[[green]]',
         'All tests successful.',
         '[[reset]]',
     );
-    $status           = pop @output;
-    $expected_status  = qr{^Result: PASS$};
-    $summary          = pop @output;
-    $expected_summary = qr{^Files=1, Tests=1, +\d+ wallclock secs};
+    @status           = pop_status_tokens( \@output );
+    @expected_status  = status_tokens( $harness, 'PASS' );
+    @summary          = pop_summary_tokens( \@output );
+    $expected_summary = summary_re( 1, 1 );
 
     is_deeply \@output, \@expected, '... and the output should be correct';
-    like $status, $expected_status,
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    like $summary, $expected_summary,
+    like summary_text( \@summary ), $expected_summary,
       '... and the report summary should look correct';
 
     # run same test twice
@@ -192,35 +197,35 @@ for my $test_args ( get_arg_sets() ) {
     chomp(@output);
 
     @expected = (
-        'My Nice Test ........',
+        header_tokens( $harness, 'My Nice Test' ),
         '1..1',
         '[[reset]]',
         'ok 1 - this is a test',
         '[[reset]]',
         '[[green]]',
-        'ok',
+        ok_token($harness),
         '[[reset]]',
-        'My Nice Test Again ..',
+        header_tokens( $harness, 'My Nice Test Again' ),
         '1..1',
         '[[reset]]',
         'ok 1 - this is a test',
         '[[reset]]',
         '[[green]]',
-        'ok',
+        ok_token($harness),
         '[[reset]]',
         '[[green]]',
         'All tests successful.',
         '[[reset]]',
     );
-    $status           = pop @output;
-    $expected_status  = qr{^Result: PASS$};
-    $summary          = pop @output;
-    $expected_summary = qr{^Files=2, Tests=2, +\d+ wallclock secs};
+    @status           = pop_status_tokens( \@output );
+    @expected_status  = status_tokens( $harness, 'PASS' );
+    @summary          = pop_summary_tokens( \@output );
+    $expected_summary = summary_re( 2, 2 );
 
     is_deeply \@output, \@expected, '... and the output should be correct';
-    like $status, $expected_status,
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    like $summary, $expected_summary,
+    like summary_text( \@summary ), $expected_summary,
       '... and the report summary should look correct';
 
     # normal tests in quiet mode
@@ -230,20 +235,20 @@ for my $test_args ( get_arg_sets() ) {
 
     chomp(@output);
     @expected = (
-        "$source_tests/harness ..",
-        'ok',
+        header_tokens( $harness_whisper, "$source_tests/harness" ),
+        ok_token($harness_whisper),
         'All tests successful.',
     );
 
-    $status           = pop @output;
-    $expected_status  = qr{^Result: PASS$};
-    $summary          = pop @output;
-    $expected_summary = qr/^Files=1, Tests=1, +\d+ wallclock secs/;
+    @status           = pop_status_tokens( \@output );
+    @expected_status  = status_tokens( $harness_whisper, 'PASS' );
+    @summary          = pop_summary_tokens( \@output );
+    $expected_summary = summary_re( 1, 1 );
 
     is_deeply \@output, \@expected, '... and the output should be correct';
-    like $status, $expected_status,
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    like $summary, $expected_summary,
+    like summary_text( \@summary ), $expected_summary,
       '... and the report summary should look correct';
 
     # normal tests in really_quiet mode
@@ -256,15 +261,15 @@ for my $test_args ( get_arg_sets() ) {
         'All tests successful.',
     );
 
-    $status           = pop @output;
-    $expected_status  = qr{^Result: PASS$};
-    $summary          = pop @output;
-    $expected_summary = qr/^Files=1, Tests=1, +\d+ wallclock secs/;
+    @status           = pop_status_tokens( \@output );
+    @expected_status  = status_tokens( $harness_mute, 'PASS' );
+    @summary          = pop_summary_tokens( \@output );
+    $expected_summary = summary_re( 1, 1 );
 
     is_deeply \@output, \@expected, '... and the output should be correct';
-    like $status, $expected_status,
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    like $summary, $expected_summary,
+    like summary_text( \@summary ), $expected_summary,
       '... and the report summary should look correct';
 
     # normal tests with failures
@@ -272,17 +277,17 @@ for my $test_args ( get_arg_sets() ) {
     @output = ();
     _runtests( $harness, "$source_tests/harness_failure" );
 
-    $status  = pop @output;
-    $summary = pop @output;
+    @status  = pop_status_tokens( \@output );
+    pop_summary_tokens( \@output );
 
-    like $status, qr{^Result: FAIL$},
+    @expected_status = status_tokens( $harness, 'FAIL' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
 
-    my @summary = @output[ 18 .. $#output ];
-    @output = @output[ 0 .. 17 ];
+    @summary = split_summary( \@output );
 
     @expected = (
-        "$source_tests/harness_failure ..",
+        header_tokens( $harness, "$source_tests/harness_failure" ),
         '1..2',
         '[[reset]]',
         'ok 1 - this is a test',
@@ -328,10 +333,10 @@ for my $test_args ( get_arg_sets() ) {
     @output = ();
     _runtests( $harness_whisper, "$source_tests/harness_failure" );
 
-    $status   = pop @output;
-    $summary  = pop @output;
+    @status   = pop_status_tokens( \@output );
+    @summary  = pop_summary_tokens( \@output );
     @expected = (
-        "$source_tests/harness_failure ..",
+        header_tokens( $harness_whisper, "$source_tests/harness_failure" ),
         'Failed 1/2 subtests',
         'Test Summary Report',
         '-------------------',
@@ -340,7 +345,8 @@ for my $test_args ( get_arg_sets() ) {
         '2',
     );
 
-    like $status, qr{^Result: FAIL$},
+    @expected_status = status_tokens( $harness_whisper, 'FAIL' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
 
     is_deeply \@output, \@expected,
@@ -351,8 +357,8 @@ for my $test_args ( get_arg_sets() ) {
     @output = ();
     _runtests( $harness_mute, "$source_tests/harness_failure" );
 
-    $status   = pop @output;
-    $summary  = pop @output;
+    @status   = pop_status_tokens( \@output );
+    @summary  = pop_summary_tokens( \@output );
     @expected = (
         'Test Summary Report',
         '-------------------',
@@ -361,7 +367,8 @@ for my $test_args ( get_arg_sets() ) {
         '2',
     );
 
-    like $status, qr{^Result: FAIL$},
+    @expected_status = status_tokens( $harness_mute, 'FAIL' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
 
     is_deeply \@output, \@expected,
@@ -378,10 +385,10 @@ for my $test_args ( get_arg_sets() ) {
     chomp(@output);
 
     @expected = (
-        "$source_tests/harness_directives ..",
+        header_tokens( $harness_directives, "$source_tests/harness_directives" ),
         'not ok 2 - we have a something # TODO some output',
         "ok 3 houston, we don't have liftoff # SKIP no funding",
-        'ok',
+        ok_token($harness_directives),
         'All tests successful.',
 
         # ~TODO {{{ this should be an option
@@ -393,15 +400,16 @@ for my $test_args ( get_arg_sets() ) {
         # }}}
     );
 
-    $status           = pop @output;
-    $summary          = pop @output;
-    $expected_summary = qr/^Files=1, Tests=3, +\d+ wallclock secs/;
+    @status           = pop_status_tokens( \@output );
+    @summary          = pop_summary_tokens( \@output );
+    $expected_summary = summary_re( 1, 3 );
 
     is_deeply \@output, \@expected, '... and the output should be correct';
-    like $summary, $expected_summary,
+    like summary_text( \@summary ), $expected_summary,
       '... and the report summary should look correct';
 
-    like $status, qr{^Result: PASS$},
+    @expected_status = status_tokens( $harness_directives, 'PASS' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
 
     # normal tests with bad tap
@@ -432,11 +440,11 @@ for my $test_args ( get_arg_sets() ) {
     chomp(@output);
 
     @output   = map { trim($_) } @output;
-    $status   = pop @output;
-    @summary  = @output[ 12 .. ( $#output - 1 ) ];
-    @output   = @output[ 0 .. 11 ];
+    @status   = pop_status_tokens( \@output );
+    pop_summary_tokens( \@output );
+    @summary = split_summary( \@output );
     @expected = (
-        "$source_tests/harness_badtap ..",
+        header_tokens( $harness, "$source_tests/harness_badtap" ),
         '1..2',
         '[[reset]]',
         'ok 1 - this is a test',
@@ -451,7 +459,8 @@ for my $test_args ( get_arg_sets() ) {
     );
     is_deeply \@output, \@expected,
       '... and failing test output should be correct';
-    like $status, qr{^Result: FAIL$},
+    @expected_status = status_tokens( $harness, 'FAIL' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
     @expected_summary = (
         '[[reset]]',
@@ -490,7 +499,7 @@ for my $test_args ( get_arg_sets() ) {
     chomp(@output);
 
     @expected = (
-        "$source_tests/harness_failure ..",
+        header_tokens( $harness_failures, "$source_tests/harness_failure" ),
         'not ok 2 - this is another test',
         'Failed 1/2 subtests',
         'Test Summary Report',
@@ -500,12 +509,15 @@ for my $test_args ( get_arg_sets() ) {
         '2',
     );
 
-    $status  = pop @output;
-    $summary = pop @output;
+    @status  = pop_status_tokens( \@output );
+    @summary = pop_summary_tokens( \@output );
 
-    like $status, qr{^Result: FAIL$},
+    @expected_status = status_tokens( $harness_failures, 'FAIL' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    $expected_summary = qr/^Files=1, Tests=2, +\d+ wallclock secs/;
+    $expected_summary = summary_re( 1, 2 );
+    like summary_text( \@summary ), $expected_summary,
+      '... and the report summary should look correct';
     is_deeply \@output, \@expected, '... and the output should be correct';
 
     # check the status output for no tests
@@ -516,7 +528,7 @@ for my $test_args ( get_arg_sets() ) {
     chomp(@output);
 
     @expected = (
-        "$sample_tests/no_output ..",
+        header_tokens( $harness_failures, "$sample_tests/no_output" ),
         'No subtests run',
         'Test Summary Report',
         '-------------------',
@@ -524,12 +536,15 @@ for my $test_args ( get_arg_sets() ) {
         'Parse errors: No plan found in TAP output',
     );
 
-    $status  = pop @output;
-    $summary = pop @output;
+    @status  = pop_status_tokens( \@output );
+    @summary = pop_summary_tokens( \@output );
 
-    like $status, qr{^Result: FAIL$},
+    @expected_status = status_tokens( $harness_failures, 'FAIL' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    $expected_summary = qr/^Files=1, Tests=2, +\d+ wallclock secs/;
+    $expected_summary = summary_re( 1, 0 );
+    like summary_text( \@summary ), $expected_summary,
+      '... and the report summary should look correct';
     is_deeply \@output, \@expected, '... and the output should be correct';
 
     SKIP: {
@@ -577,10 +592,11 @@ SKIP: {
     eval { _runtests( $harness, 't/data/catme.1' ); };
 
     my @output = tied($$capture)->dump;
-    my $status = pop @output;
-    like $status, qr{^Result: PASS$},
+    my @status = pop_status_tokens( \@output );
+    my @expected_status = status_tokens( $harness, 'PASS' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    pop @output;    # get rid of summary line
+    pop_summary_tokens( \@output );
     my $answer = pop @output;
     is( $answer, "All tests successful.\n", 'cat meows' );
 }
@@ -598,10 +614,11 @@ SKIP: {
     _runtests( $harness, "$source_tests/harness" );
 
     my @output = tied($$capture)->dump;
-    my $status = pop @output;
-    like $status, qr{^Result: PASS$},
+    my @status = pop_status_tokens( \@output );
+    my @expected_status = status_tokens( $harness, 'PASS' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    pop @output;    # get rid of summary line
+    pop_summary_tokens( \@output );
     my $answer = pop @output;
     is( $answer, "All tests successful.\n", 'cat meows' );
 }
@@ -629,10 +646,11 @@ SKIP: {
     _runtests( $harness, "$source_tests/harness" );
 
     my @output = tied($$capture)->dump;
-    my $status = pop @output;
-    like $status, qr{^Result: PASS$},
+    my @status = pop_status_tokens( \@output );
+    my @expected_status = status_tokens( $harness, 'PASS' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    pop @output;    # get rid of summary line
+    pop_summary_tokens( \@output );
     my $answer = pop @output;
     is( $answer, "All tests successful.\n", 'cat meows' );
 }
@@ -652,10 +670,11 @@ SKIP: {
     _runtests( $harness, "$source_tests/harness" );
 
     my @output = tied($$capture)->dump;
-    my $status = pop @output;
-    like $status, qr{^Result: PASS$},
+    my @status = pop_status_tokens( \@output );
+    my @expected_status = status_tokens( $harness, 'PASS' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    pop @output;    # get rid of summary line
+    pop_summary_tokens( \@output );
     my $answer = pop @output;
     is( $answer, "All tests successful.\n", 'cat meows' );
 }
@@ -676,10 +695,11 @@ SKIP: {
     _runtests( $harness, "$source_tests/harness" );
 
     my @output = tied($$capture)->dump;
-    my $status = pop @output;
-    like $status, qr{^Result: PASS$},
+    my @status = pop_status_tokens( \@output );
+    my @expected_status = status_tokens( $harness, 'PASS' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    pop @output;    # get rid of summary line
+    pop_summary_tokens( \@output );
     my $answer = pop @output;
     is( $answer, "All tests successful.\n", 'cat meows' );
 }
@@ -702,10 +722,11 @@ SKIP: {
     );
 
     my @output = tied($$capture)->dump;
-    my $status = pop @output;
-    like $status, qr{^Result: PASS$},
+    my @status = pop_status_tokens( \@output );
+    my @expected_status = status_tokens( $harness, 'PASS' );
+    is_deeply \@status, \@expected_status,
       '... and the status line should be correct';
-    pop @output;    # get rid of summary line
+    pop_summary_tokens( \@output );
     is( $output[-1], "All tests successful.\n",
         'No exec accumulation'
     );
@@ -726,10 +747,11 @@ SKIP: {
     _runtests( $harness, "$source_tests/source.1" );
 
     my @output = tied($$capture)->dump;
-    my $status = pop @output;
-    like $status, qr{^Result: PASS$},
+    my @status = pop_status_tokens( \@output );
+    my @expected_status = status_tokens( $harness, 'PASS' );
+    is_deeply \@status, \@expected_status,
       'customized File source has correct status line';
-    pop @output;    # get rid of summary line
+    pop_summary_tokens( \@output );
     my $answer = pop @output;
     is( $answer, "All tests successful.\n", '... all tests passed' );
 }
@@ -764,9 +786,11 @@ SKIP: {
     is( $raw_source, $source_test, '... used the right source' );
 
     my @output = tied($$capture)->dump;
-    my $status = pop(@output) || '';
-    like $status, qr{^Result: PASS$}, '... and test has correct status line';
-    pop @output;    # get rid of summary line
+    my @status = pop_status_tokens( \@output );
+    my @expected_status = status_tokens( $harness, 'PASS' );
+    is_deeply \@status, \@expected_status,
+      '... and test has correct status line';
+    pop_summary_tokens( \@output );
     my $answer = pop @output;
     is( $answer, "All tests successful.\n", '... all tests passed' );
 }
@@ -774,6 +798,126 @@ SKIP: {
 sub trim {
     $_[0] =~ s/^\s+|\s+$//g;
     return $_[0];
+}
+
+sub pop_status_tokens {
+    my ($output) = @_;
+    my $idx;
+    for ( my $i = $#$output; $i >= 0; $i-- ) {
+        if ( $output->[$i] =~ /^Result:/ ) {
+            $idx = $i;
+            last;
+        }
+    }
+    return () unless defined $idx;
+    my @tokens = splice( @$output, $idx );
+    @tokens = grep { $_ ne '' } map { trim($_) } @tokens;
+    return @tokens;
+}
+
+sub pop_summary_tokens {
+    my ($output) = @_;
+    my $idx;
+    for ( my $i = $#$output; $i >= 0; $i-- ) {
+        if ( $output->[$i] =~ /Files=/ ) {
+            $idx = $i;
+            last;
+        }
+    }
+    return () unless defined $idx;
+
+    my $start = $idx;
+    while ( $start > 0 && $output->[ $start - 1 ] =~ /^\[\[.*\]\]$/ ) {
+        if ( $output->[ $start - 1 ] eq '[[reset]]' ) {
+            last if $start < 2 || $output->[ $start - 2 ] !~ /^\[\[.*\]\]$/;
+        }
+        $start--;
+    }
+
+    return splice( @$output, $start );
+}
+
+sub summary_text {
+    my ($tokens) = @_;
+    my $summary = join '', @{$tokens};
+    $summary =~ s/\[\[[^\]]+\]\]//g;
+    return trim($summary);
+}
+
+sub split_summary {
+    my ($output) = @_;
+    my $idx;
+    for ( my $i = 0; $i < @$output; $i++ ) {
+        if ( $output->[$i] eq 'Test Summary Report' ) {
+            $idx = $i;
+            last;
+        }
+    }
+    return () unless defined $idx;
+
+    if ( $idx > 0 && $output->[ $idx - 1 ] =~ /^\[\[.*\]\]$/ ) {
+        $idx--;
+    }
+
+    my @summary = splice( @$output, $idx );
+    return @summary;
+}
+
+sub segments_to_tokens {
+    my ( $formatter, @segments ) = @_;
+    my @tokens;
+    for my $segment (@segments) {
+        my $text = $segment->{text} // '';
+        next unless length $text;
+        my $trimmed = trim($text);
+        if ( $formatter->_colorizer && $segment->{color} ) {
+            my @colors = ref $segment->{color} eq 'ARRAY'
+              ? @{ $segment->{color} }
+              : ( $segment->{color} );
+            push @tokens, map { "[[$_]]" } @colors;
+            push @tokens, $trimmed if length $trimmed;
+            push @tokens, '[[reset]]';
+        }
+        else {
+            push @tokens, $trimmed if length $trimmed;
+        }
+    }
+    return @tokens;
+}
+
+sub header_tokens {
+    my ( $harness, $name ) = @_;
+    my $formatter = $harness->formatter;
+    my @segments = $formatter->_name_segments($name);
+    return segments_to_tokens( $formatter, @segments );
+}
+
+sub status_tokens {
+    my ( $harness, $status ) = @_;
+    my $formatter = $harness->formatter;
+    if ( $formatter->_colorizer ) {
+        my $color;
+        if ( $status eq 'PASS' ) {
+            $color = $formatter->_success_color;
+        }
+        elsif ( $status eq 'FAIL' ) {
+            $color = $formatter->_failure_color;
+        }
+        return $color
+          ? ( 'Result:', "[[$color]]", $status, '[[reset]]' )
+          : ( 'Result:', $status );
+    }
+    return ("Result: $status");
+}
+
+sub ok_token {
+    my ($harness) = @_;
+    return $harness->formatter->_status_token(1);
+}
+
+sub summary_re {
+    my ( $files, $tests ) = @_;
+    return qr/^Files=$files,\s*Tests=$tests,\s*\S+ms\s*wallclock\s*\(\S+ms\s*usr\s*\+\s*\S+ms\s*sys\s*=\s*\S+ms\s*CPU\)/;
 }
 
 sub liblist {

@@ -8,7 +8,7 @@ use base 'TAP::Formatter::Session';
 my @ACCESSOR;
 
 BEGIN {
-    my @CLOSURE_BINDING = qw( header result clear_for_close close_test );
+    my @CLOSURE_BINDING = qw( header result clear_for_close close_test tick );
 
     for my $method (@CLOSURE_BINDING) {
         no strict 'refs';
@@ -82,7 +82,8 @@ sub _closures {
 
     my $parser     = $self->parser;
     my $formatter  = $self->formatter;
-    my $pretty     = $formatter->_format_name( $self->name );
+    my @pretty_segments = $formatter->_name_segments( $self->name );
+    my $pretty_text = $formatter->_segments_text(@pretty_segments);
     my $show_count = $self->show_count;
 
     my $really_quiet = $formatter->really_quiet;
@@ -104,6 +105,13 @@ sub _closures {
     my $last_seen_test      = 0;
     my $last_printed_test   = 0;
 
+    my $spinner_enabled = $formatter->poll && $formatter->_is_interactive;
+    my $spinner_frames  = $formatter->_spinner_frames;
+    my $spinner_index   = 0;
+    my $last_progress_text;
+    my $last_progress_tail;
+    my $last_progress_len;
+
     my $subtest_state;
 
     if ( $expand && !$verbose ) {
@@ -122,27 +130,87 @@ sub _closures {
         $subtest_output_started = $subtest_state->{output_started} || 0;
     }
 
+    my $current_spinner = sub {
+        return '' unless $spinner_enabled;
+        return $spinner_frames->[ $spinner_index % @$spinner_frames ];
+    };
+
+    my $advance_spinner = sub {
+        return '' unless $spinner_enabled;
+        $spinner_index = ( $spinner_index + 1 ) % @$spinner_frames;
+        return $spinner_frames->[$spinner_index];
+    };
+
+    my $render_line = sub {
+        my ( $text, $spinner, $len_ref, $segments, $tail ) = @_;
+        my $line = $text . $spinner;
+        my $pad = '';
+        if ( defined $$len_ref && length $line < $$len_ref ) {
+            $pad = ' ' x ( $$len_ref - length $line );
+        }
+        $formatter->_render_spinner_line(
+            text     => $text,
+            segments => $segments,
+            tail     => $tail,
+            spinner  => $spinner,
+            pad      => $pad,
+            output   => $output,
+        );
+        $$len_ref = length $line;
+    };
+
     my $print_status = sub {
         my ( $number, $now ) = @_;
         $output = $formatter->_get_output_method($parser);
-        $formatter->$output("\r$pretty$number$plan");
+        my $tail = "$number$plan";
+        my $text = $pretty_text . $tail;
+        $last_progress_text = $text;
+        $last_progress_tail = $tail;
+        $render_line->(
+            $text, $current_spinner->(), \$last_progress_len,
+            \@pretty_segments, $tail
+        );
         $last_status_printed = $now;
         $last_printed_test   = $number;
     };
 
+    my $finalize_progress_line = sub {
+        return unless defined $last_progress_len || defined $last_progress_text;
+        my $text = $last_progress_text // '';
+        my $len  = length $text;
+        my $pad  = '';
+        if ( defined $last_progress_len && $len < $last_progress_len ) {
+            $pad = ' ' x ( $last_progress_len - $len );
+        }
+        $formatter->$output("\r");
+        $formatter->_render_segments(@pretty_segments);
+        $formatter->_output($last_progress_tail // '');
+        $formatter->$output($pad) if length $pad;
+        $formatter->$output("\n");
+        $last_progress_len  = undef;
+        $last_progress_text = undef;
+        $last_progress_tail = undef;
+    };
+
+    my $subtest_name_data = sub {
+        my ( $depth, $name ) = @_;
+        return $formatter->_subtest_name_data( $subtest_state, $depth, $name );
+    };
+
     my $format_subtest_name = sub {
         my ( $depth, $name ) = @_;
-        my $len = length $name;
-        my $longest = $subtest_state->{longest};
-        $longest->[$depth] = $len
-          if !defined $longest->[$depth] || $len > $longest->[$depth];
-        my $periods = '.' x ( $longest->[$depth] + 2 - $len );
-        return ( '  ' x $depth ) . $name . $periods . ' ';
+        my ( $text ) = $subtest_name_data->( $depth, $name );
+        return $text;
     };
 
     my $start_subtest_output = sub {
         unless ($newline_printed) {
-            $formatter->_output("\n");
+            if ( defined $last_progress_len || defined $last_progress_text ) {
+                $finalize_progress_line->();
+            }
+            else {
+                $formatter->_output("\n");
+            }
             $newline_printed = 1;
         }
         $subtest_output_started = 1;
@@ -152,49 +220,62 @@ sub _closures {
     my $emit_subtest_progress = sub {
         my ($text) = @_;
         $start_subtest_output->();
-        my $len = length $text;
+        my $spinner = $current_spinner->();
+        $spinner = ' ' . $spinner if length $spinner;
+        my $line = $text . $spinner;
+        my $len = length $line;
         my $pad = '';
         if ( defined $subtest_state->{last_len}
             && $len < $subtest_state->{last_len} )
         {
             $pad = ' ' x ( $subtest_state->{last_len} - $len );
         }
-        $formatter->_output("\r$text$pad");
+        $formatter->_render_spinner_line(
+            text    => $text,
+            spinner => $spinner,
+            pad     => $pad,
+        );
         $subtest_state->{last_len} = $len;
+        $subtest_state->{last_text} = $text;
         $subtest_state->{progress_active} = 1;
     };
 
     my $emit_subtest_final = sub {
-        my ( $pretty, $ok ) = @_;
+        my ( $text, $segments, $ok ) = @_;
         $start_subtest_output->();
-        my $status = $ok ? 'ok' : 'not ok';
-        my $text   = $pretty . $status;
-        my $len    = length $text;
+        my $status = $formatter->_status_token($ok);
+        my $line   = $text . $status;
+        my $len    = length $line;
         my $pad = '';
         if ( defined $subtest_state->{last_len}
             && $len < $subtest_state->{last_len} )
         {
             $pad = ' ' x ( $subtest_state->{last_len} - $len );
         }
-        $formatter->_output("\r$pretty");
-        if ( $formatter->can('_set_colors') ) {
-            my $color = $ok
-              ? $formatter->_success_color
-              : $formatter->_failure_color;
-            $formatter->_set_colors($color);
-        }
-        $formatter->_output($status);
-        $formatter->_set_colors('reset') if $formatter->can('_set_colors');
-        $formatter->_output($pad);
+        $formatter->_output("\r");
+        my $color = $ok
+          ? $formatter->_success_color
+          : $formatter->_failure_color;
+        $formatter->_render_segments(
+            @{$segments},
+            { text => $status, color => $color },
+        );
+        $formatter->_output($pad) if length $pad;
         $formatter->_output("\n");
         $subtest_state->{last_len}        = undef;
+        $subtest_state->{last_text}       = undef;
         $subtest_state->{progress_active} = 0;
     };
 
     return {
         header => sub {
-            $formatter->_output($pretty)
-              unless $really_quiet;
+            return if $really_quiet;
+            if ( @pretty_segments ) {
+                $formatter->_render_segments(@pretty_segments);
+            }
+            else {
+                $formatter->_output($pretty_text);
+            }
         },
 
         result => sub {
@@ -236,10 +317,11 @@ sub _closures {
                         );
                     }
                     elsif ( $event->{type} eq 'final' ) {
-                        my $pretty
-                          = $format_subtest_name->( $event->{depth},
+                        my ( $pretty, $segments )
+                          = $subtest_name_data->( $event->{depth},
                             $event->{name} );
-                        $emit_subtest_final->( $pretty, $event->{ok} );
+                        $emit_subtest_final->(
+                            $pretty, $segments, $event->{ok} );
                     }
                 }
             }
@@ -280,15 +362,19 @@ sub _closures {
         },
 
         clear_for_close => sub {
-            my $spaces
-              = ' ' x length( '.' . $pretty . $plan . $parser->tests_run );
+            my $len = $last_progress_len;
+            if ( !defined $len ) {
+                $len = length( '.' . $pretty_text . $plan . $parser->tests_run );
+                $len++ if $spinner_enabled;
+            }
+            my $spaces = ' ' x $len;
             $formatter->$output("\r$spaces");
         },
 
         close_test => sub {
             if ( $show_count && !$really_quiet ) {
                 $self->clear_for_close;
-                $formatter->$output("\r$pretty");
+                $formatter->$output("\r");
             }
 
             # Avoid circular references
@@ -304,9 +390,73 @@ sub _closures {
                 $self->_output_test_failure($parser);
             }
             else {
-                my $time_report = $self->time_report($formatter, $parser);
-                $formatter->_output_success( $self->_make_ok_line($time_report) );
+                my @time_parts
+                  = $self->time_report_parts( $formatter, $parser );
+                my $status = $formatter->_status_token(1);
+                if ( $formatter->_is_interactive ) {
+                    my @segments = (
+                        $formatter->_name_segments( $self->name ),
+                        {   text  => $status,
+                            color => $formatter->_success_color
+                        },
+                        $formatter->_time_report_segments( \@time_parts ),
+                    );
+                    $formatter->_output("\r") unless $really_quiet;
+                    $formatter->_render_segments(@segments);
+                }
+                else {
+                    my @segments = (
+                        {   text  => $status,
+                            color => $formatter->_success_color
+                        },
+                        $formatter->_time_report_segments( \@time_parts ),
+                    );
+                    $formatter->_render_segments(@segments);
+                }
+                $formatter->_output("\n");
             }
+
+            $formatter->_show_cursor if $formatter->can('_show_cursor');
+            if ( $formatter->{_current_session}
+                && $formatter->{_current_session} == $self )
+            {
+                $formatter->{_current_session} = undef;
+            }
+        },
+
+        tick => sub {
+            return unless $spinner_enabled;
+
+            my $spinner = $advance_spinner->();
+            if ( $subtest_state && $subtest_state->{progress_active} ) {
+                my $spinner_sub = $spinner;
+                $spinner_sub = ' ' . $spinner_sub if length $spinner_sub;
+                my $text = $subtest_state->{last_text} || '';
+                return unless length $text;
+                my $line = $text . $spinner_sub;
+                my $len  = length $line;
+                my $pad  = '';
+                if ( defined $subtest_state->{last_len}
+                    && $len < $subtest_state->{last_len} )
+                {
+                    $pad = ' ' x ( $subtest_state->{last_len} - $len );
+                }
+                $formatter->_render_spinner_line(
+                    text    => $text,
+                    spinner => $spinner_sub,
+                    pad     => $pad,
+                );
+                $subtest_state->{last_len} = $len;
+                return;
+            }
+
+            return unless $show_count && !$subtest_output_started;
+            return unless defined $last_progress_text;
+
+            $render_line->(
+                $last_progress_text, $spinner, \$last_progress_len,
+                \@pretty_segments, $last_progress_tail
+            );
         },
     };
 }

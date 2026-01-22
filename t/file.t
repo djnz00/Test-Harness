@@ -17,7 +17,7 @@ my $HARNESS = 'TAP::Harness';
 my $source_tests = 't/source_tests';
 my $sample_tests = 't/sample-tests';
 
-plan tests => 56;
+plan tests => 58;
 
 # note that this test will always pass when run through 'prove'
 ok $ENV{HARNESS_ACTIVE},  'HARNESS_ACTIVE env variable should be set';
@@ -54,6 +54,14 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
             comments => 1
         }
     );
+    my $ok_token = $harness->formatter->can('_status_token')
+      ? $harness->formatter->_status_token(1)
+      : 'ok';
+
+    is $harness->formatter->_format_time_ms(0), '0ms',
+      '... 0ms formatting is stable';
+    is $harness->formatter->_format_time_ms(0.0004), '<1ms',
+      '... sub-millisecond formatting is stable';
 
     can_ok $harness, 'runtests';
 
@@ -70,13 +78,13 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
         "$source_tests/harness ..",
         '1..1',
         'ok 1 - this is a test',
-        'ok',
+        $ok_token,
         'All tests successful.',
     );
     my $status           = pop @output;
     my $expected_status  = qr{^Result: PASS$};
     my $summary          = pop @output;
-    my $expected_summary = qr{^Files=1, Tests=1, +\d+ wallclock secs};
+    my $expected_summary = qr{^Files=1, Tests=1, +\S+ms wallclock \(\S+ms usr \+ \S+ms sys = \S+ms CPU\)};
 
     is_deeply \@output, \@expected, '... the output should be correct';
     like $status, $expected_status,
@@ -99,13 +107,13 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
         'My Nice Test ..',
         '1..1',
         'ok 1 - this is a test',
-        'ok',
+        $ok_token,
         'All tests successful.',
     );
     $status           = pop @output;
     $expected_status  = qr{^Result: PASS$};
     $summary          = pop @output;
-    $expected_summary = qr{^Files=1, Tests=1, +\d+ wallclock secs};
+    $expected_summary = qr{^Files=1, Tests=1, +\S+ms wallclock \(\S+ms usr \+ \S+ms sys = \S+ms CPU\)};
 
     is_deeply \@output, \@expected, '... the output should be correct';
     like $status, $expected_status,
@@ -130,17 +138,17 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
         'My Nice Test ........',
         '1..1',
         'ok 1 - this is a test',
-        'ok',
+        $ok_token,
         'My Nice Test Again ..',
         '1..1',
         'ok 1 - this is a test',
-        'ok',
+        $ok_token,
         'All tests successful.',
     );
     $status           = pop @output;
     $expected_status  = qr{^Result: PASS$};
     $summary          = pop @output;
-    $expected_summary = qr{^Files=2, Tests=2, +\d+ wallclock secs};
+    $expected_summary = qr{^Files=2, Tests=2, +\S+ms wallclock \(\S+ms usr \+ \S+ms sys = \S+ms CPU\)};
 
     is_deeply \@output, \@expected, '... the output should be correct';
     like $status, $expected_status,
@@ -157,14 +165,14 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
     chomp(@output);
     @expected = (
         "$source_tests/harness ..",
-        "ok",
+        $ok_token,
         'All tests successful.',
     );
 
     $status           = pop @output;
     $expected_status  = qr{^Result: PASS$};
     $summary          = pop @output;
-    $expected_summary = qr/^Files=1, Tests=1, +\d+ wallclock secs/;
+    $expected_summary = qr/^Files=1, Tests=1, +\S+ms wallclock \(\S+ms usr \+ \S+ms sys = \S+ms CPU\)/;
 
     is_deeply \@output, \@expected, '... the output should be correct';
     like $status, $expected_status,
@@ -185,7 +193,7 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
     $status           = pop @output;
     $expected_status  = qr{^Result: PASS$};
     $summary          = pop @output;
-    $expected_summary = qr/^Files=1, Tests=1, +\d+ wallclock secs/;
+    $expected_summary = qr/^Files=1, Tests=1, +\S+ms wallclock \(\S+ms usr \+ \S+ms sys = \S+ms CPU\)/;
 
     is_deeply \@output, \@expected, '... the output should be correct';
     like $status, $expected_status,
@@ -292,7 +300,7 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
         "$source_tests/harness_directives ..",
         'not ok 2 - we have a something # TODO some output',
         "ok 3 houston, we don't have liftoff # SKIP no funding",
-        'ok',
+        $ok_token,
         'All tests successful.',
 
         # ~TODO {{{ this should be an option
@@ -306,7 +314,7 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
 
     $status           = pop @output;
     $summary          = pop @output;
-    $expected_summary = qr/^Files=1, Tests=3, +\d+ wallclock secs/;
+    $expected_summary = qr/^Files=1, Tests=3, +\S+ms wallclock \(\S+ms usr \+ \S+ms sys = \S+ms CPU\)/;
 
     is_deeply \@output, \@expected, '... the output should be correct';
     like $summary, $expected_summary,
@@ -373,7 +381,7 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
     $summary = pop @output;
 
     like $status, qr{^Result: FAIL$}, '... the status line should be correct';
-    $expected_summary = qr/^Files=1, Tests=2, +\d+ wallclock secs/;
+    $expected_summary = qr/^Files=1, Tests=2, +\S+ms wallclock \(\S+ms usr \+ \S+ms sys = \S+ms CPU\)/;
     is_deeply \@output, \@expected, '... and the output should be correct';
 
     # check the status output for no tests
@@ -397,7 +405,7 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
     $summary = pop @output;
 
     like $status, qr{^Result: FAIL$}, '... the status line should be correct';
-    $expected_summary = qr/^Files=1, Tests=2, +\d+ wallclock secs/;
+    $expected_summary = qr/^Files=1, Tests=2, +\S+ms wallclock \(\S+ms usr \+ \S+ms sys = \S+ms CPU\)/;
     is_deeply \@output, \@expected, '... and the output should be correct';
 
     # coverage testing for _should_show_comments
@@ -426,7 +434,7 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
     $summary = pop @output;
 
     like $status, qr{^Result: FAIL$}, '... the status line should be correct';
-    $expected_summary = qr/^Files=1, Tests=2, +\d+ wallclock secs/;
+    $expected_summary = qr/^Files=1, Tests=2, +\S+ms wallclock \(\S+ms usr \+ \S+ms sys = \S+ms CPU\)/;
     is_deeply \@output, \@expected, '... and the output should be correct';
 
     # coverage testing for _should_show_comments and _should_show_failures
@@ -458,7 +466,7 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
     $summary = pop @output;
 
     like $status, qr{^Result: FAIL$}, '... the status line should be correct';
-    $expected_summary = qr/^Files=1, Tests=2, +\d+ wallclock secs/;
+    $expected_summary = qr/^Files=1, Tests=2, +\S+ms wallclock \(\S+ms usr \+ \S+ms sys = \S+ms CPU\)/;
     is_deeply \@output, \@expected, '... and the output should be correct';
 
     #XXXX
@@ -475,4 +483,3 @@ sub _runtests {
     my $aggregate = $harness->runtests(@tests);
     return $aggregate;
 }
-

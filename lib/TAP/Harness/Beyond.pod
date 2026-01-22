@@ -88,7 +88,7 @@ As soon as one of my failing tests passes it will be removed from
 the list of failed tests. Eventually I fix them all and prove can
 find no failing tests to run:
 
-  Files=0, Tests=0, 0 wallclock secs ( 0.00 usr + 0.00 sys = 0.00 CPU)
+  Files=0, Tests=0, 0ms wallclock (0ms usr + 0ms sys = 0ms CPU)
   Result: NOTESTS
 
 As I work on a particular part of my module it's most likely that
