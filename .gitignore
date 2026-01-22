@@ -18,3 +18,9 @@
 /pm_to_blib
 /tags
 META.*
+AGENTS.md
+CODEBASE.md
+GPATH
+GRTAGS
+GTAGS
+source.yaml

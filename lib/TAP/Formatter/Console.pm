@@ -315,7 +315,7 @@ sub _render_spinner_line {
 sub _name_segments {
     my ( $self, $test ) = @_;
     my $name = $test;
-    my $periods = '.' x ( $self->_longest + 2 - length $test );
+    my $periods = '.' x ( $self->_longest + 3 - length $test );
     $periods = " $periods ";
 
     my @segments;
@@ -334,13 +334,12 @@ sub _subtest_name_data {
     my $longest = $state->{longest};
     $longest->[$depth] = $len
       if !defined $longest->[$depth] || $len > $longest->[$depth];
-    my $periods = '.' x ( $longest->[$depth] + 2 - $len );
+    my $periods = ' ' . '.' x ( $longest->[$depth] + 3 - $len ) . ' ';
     my $prefix = ( '  ' x $depth ) . $name;
-    my $dots   = ' ' . $periods . ' ';
-    my $text   = $prefix . $dots;
+    my $text   = $prefix . $periods;
     my @segments = (
         { text => $prefix, color => $self->_name_color },
-        { text => $dots,   color => $self->_muted_colors },
+        { text => $periods, color => $self->_muted_colors },
     );
     return ( $text, \@segments );
 }
