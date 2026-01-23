@@ -281,26 +281,19 @@ sub _count_trailer_enabled {
 
 sub _max_trailer_len {
     my ( $self, $context ) = @_;
-    if ( defined $context && $context eq 'subtest' ) {
-        my $count_len  = length(' MMMM/NNNN');
-        my $status_len = $self->utf ? length(' ✓') : length(' not ok');
-        return $count_len > $status_len ? $count_len : $status_len;
+    if ($self->_count_trailer_enabled) {
+	my $count_len = length(' MMMM/NNNN');
+	$count_len += length(' X') if $self->_is_interactive;
+	return $count_len;
     }
-
-    my $status_len = length(' not ok');
-    my $count_len  = 0;
-    if ( $self->_count_trailer_enabled ) {
-        $count_len = length(' MMMM/NNNN');
-    }
-
-    return $count_len > $status_len ? $count_len : $status_len;
+    return $self->utf ? length(' x') : length(' not ok');
 }
 
 sub _dot_count {
     my ( $self, $header_len, $trailer_len ) = @_;
     my $width = $self->_effective_width;
     $width = $self->_min_width unless defined $width;
-    my $dots = $width - $header_len - $trailer_len;
+    my $dots = $width - $header_len - $trailer_len - 1;
     $dots = 3 if $dots < 3;
     return $dots;
 }
@@ -322,7 +315,7 @@ sub _subtest_name_parts {
 
     my $header_prefix_len = length($indent) + 1;
     my $available
-      = $effective - $trailer_len - 3 - $header_prefix_len;
+      = $effective - $trailer_len - 4 - $header_prefix_len;
     $name = $self->_truncate_name( $name, $available );
 
     my $header_len = $header_prefix_len + length($name);
@@ -339,7 +332,7 @@ sub _default_width_for_longest {
     $longest ||= 0;
     my $header_len = $longest + 1;
     my $width
-      = $header_len + 3 + $self->_max_trailer_len('top');
+      = $header_len + 4 + $self->_max_trailer_len('top');
     return $self->_clamp_width($width);
 }
 
@@ -350,18 +343,28 @@ sub _resolve_width {
         return $self->_clamp_width($width);
     }
 
-    if ( $self->_is_interactive ) {
-        my $cols = $self->_terminal_columns;
-        if ( defined $cols ) {
-            $self->_width_source('terminal');
-            return $self->_clamp_width($cols);
-        }
-    }
-
     my $longest = 0;
     for my $test (@tests) {
         my $len = length $test;
         $longest = $len if $len > $longest;
+    }
+
+    if ( $self->_is_interactive ) {
+        my $cols = $self->_terminal_columns;
+        if ( defined $cols ) {
+            if ( !$self->expand ) {
+                my $computed = $self->_default_width_for_longest($longest);
+                my $width = $cols < $computed ? $cols : $computed;
+                $self->_width_source(
+                      $width == $computed
+                    ? 'computed'
+                    : 'terminal'
+                );
+                return $self->_clamp_width($width);
+            }
+            $self->_width_source('terminal');
+            return $self->_clamp_width($cols);
+        }
     }
 
     $self->_width_source('computed');
@@ -383,6 +386,25 @@ sub _ensure_effective_width {
 
         my $cols = $self->_terminal_columns;
         if ( defined $cols ) {
+            if ( !$self->expand ) {
+                my $longest = $self->_longest || 0;
+                if ( defined $test ) {
+                    my $len = length $test;
+                    $longest = $len if $len > $longest;
+                    $self->_longest($longest);
+                }
+                my $computed = $self->_default_width_for_longest($longest);
+                my $width = $cols < $computed ? $cols : $computed;
+                my $effective = $self->_clamp_width($width);
+                $self->_effective_width($effective);
+                $self->_width_source(
+                      $width == $computed
+                    ? 'computed'
+                    : 'terminal'
+                );
+                return $effective;
+            }
+
             my $effective = $self->_clamp_width($cols);
             $self->_effective_width($effective);
             $self->_width_source('terminal');
@@ -439,7 +461,7 @@ sub _format_name {
       = $self->_is_interactive || defined $self->width;
     if ($allow_truncate) {
         my $available
-          = $effective - $trailer_len - 3 - $header_prefix_len;
+          = $effective - $trailer_len - 4 - $header_prefix_len;
         $name = $self->_truncate_name( $name, $available );
     }
 

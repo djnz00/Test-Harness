@@ -25,8 +25,8 @@ use Test::More;
 
 sub expected_default_width {
     my ($longest) = @_;
-    my $trailer_len = length(' not ok');
-    my $width = $longest + 1 + 3 + $trailer_len;
+    my $trailer_len = length(' x');
+    my $width = $longest + 1 + 4 + $trailer_len;
     return $width < 28 ? 28 : $width;
 }
 
@@ -72,10 +72,25 @@ sub expected_default_width {
 
     $formatter->prepare('anything');
 
+    my $computed = expected_default_width( length('anything') );
+    is(
+        $formatter->_effective_width,
+        40 < $computed ? 40 : $computed,
+        'TTY default width uses min of terminal and computed when not expanded'
+    );
+}
+
+{
+    my $formatter = FormatterWidthTest->new( { expand => 1 } );
+    $formatter->{_interactive} = 1;
+    $formatter->{_terminal_columns} = 40;
+
+    $formatter->prepare('anything');
+
     is(
         $formatter->_effective_width,
         40,
-        'TTY default width uses terminal columns'
+        'TTY default width uses terminal columns when expanded'
     );
 }
 

@@ -496,11 +496,11 @@ sub longest_name {
 
 sub header_for {
     my ( $name, $longest ) = @_;
-    my $trailer_len = length(' not ok');
-    my $width = $longest + 1 + 3 + $trailer_len;
+    my $trailer_len = length(' x');
+    my $width = $longest + 1 + 4 + $trailer_len;
     $width = 28 if $width < 28;
     my $header_len = length($name) + 1;
-    my $dots = $width - $header_len - $trailer_len;
+    my $dots = $width - $header_len - $trailer_len - 1;
     $dots = 3 if $dots < 3;
     return $name . ' ' . ( '.' x $dots );
 }

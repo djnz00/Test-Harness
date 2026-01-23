@@ -76,8 +76,11 @@ Options that take arguments:
       --poll=N          Poll interval in milliseconds
                         (default 1s, 100ms if interactive).
       --width=N         Set output width for trailer alignment (min 28).
-                        Defaults to terminal width on a TTY; otherwise
-                        uses the longest top-level test name.
+                        On a TTY, defaults to the lesser of terminal width
+                        and the computed width from the longest top-level
+                        test name unless -x/--expand is used; with -x it
+                        uses the terminal width. Non-TTY output uses the
+                        longest top-level test name.
       --state=opts      Control prove's persistent state.
       --statefile=file  Use `file` instead of `.prove` for state
       --rc=rcfile       Process options from rcfile

@@ -333,7 +333,7 @@ sub _name_segments {
       = $self->_is_interactive || defined $self->width;
     if ($allow_truncate) {
         my $available
-          = $effective - $trailer_len - 3 - $header_prefix_len;
+          = $effective - $trailer_len - 4 - $header_prefix_len;
         $name = $self->_truncate_name( $name, $available );
     }
 

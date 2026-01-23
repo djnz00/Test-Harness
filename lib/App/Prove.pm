@@ -810,10 +810,12 @@ CLI-only and are not read from C<HARNESS_OPTIONS>.
 
 The C<width> attribute is set via C<--width=N>. When specified, output
 width is clamped to a minimum of 28 columns. When omitted, TTY output
-defaults to the current terminal width; non-TTY output derives a width
-from the longest top-level test name plus minimum dot padding and
-trailer length. This option is CLI-only and is not read from
-C<HARNESS_OPTIONS>.
+defaults to the lesser of the terminal width and the width computed
+from the longest top-level test name (with minimum dot padding) unless
+subtest expansion is enabled. With expansion, TTY output uses the
+terminal width. Non-TTY output derives a width from the longest
+top-level test name plus minimum dot padding and trailer length. This
+option is CLI-only and is not read from C<HARNESS_OPTIONS>.
 
 =head1 PLUGINS
 

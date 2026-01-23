@@ -60,8 +60,8 @@ like(
 );
 
 $out = run_prove( '--width=36', $long );
-my $top_trailer = length(' not ok');
-my $top_max = 36 - $top_trailer - 3 - 1;
+my $top_trailer = length(' x');
+my $top_max = 36 - $top_trailer - 4 - 1;
 my $top_truncated
   = length($long) > $top_max
   ? substr( $long, 0, $top_max - 3 ) . '...'
@@ -103,9 +103,9 @@ is(
 );
 
 my $long_subtest = 'a very long subtest name that should be truncated';
-my $subtest_trailer = length(' MMMM/NNNN');
+my $subtest_trailer = length(' x');
 my $subtest_indent = 4;
-my $subtest_max = 36 - $subtest_trailer - 3 - ( $subtest_indent + 1 );
+my $subtest_max = 36 - $subtest_trailer - 4 - ( $subtest_indent + 1 );
 my $subtest_truncated
   = length($long_subtest) > $subtest_max
   ? substr( $long_subtest, 0, $subtest_max - 3 ) . '...'
