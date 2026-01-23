@@ -301,7 +301,7 @@ sub _dot_count {
 sub _truncate_name {
     my ( $self, $name, $max_len ) = @_;
     return $name unless defined $max_len;
-    return $name if $max_len < 8;
+    $max_len = 8 if $max_len < 8;
     return $name if length $name <= $max_len;
     return substr( $name, 0, $max_len - 3 ) . '...';
 }
