@@ -2,12 +2,16 @@ print <<'SUBTEST_TAP';
 TAP version 14
 1..2
 # Subtest: outer
-    1..2
+    1..3
     ok 1 - inner parent test
     # Subtest: inner
         1..1
         ok 1 - leaf
     ok 2 - inner
+    # Subtest: a very long subtest name that should be truncated
+        1..1
+        ok 1 - leaf
+    ok 3 - long name
 ok 1 - outer
 ok 2 - top
 SUBTEST_TAP

@@ -58,7 +58,7 @@ BEGIN {
       really_quiet recurse backwards shuffle taint_fail taint_warn timer
       poll utf verbose warnings_fail warnings_warn show_help show_man show_version
       state_class test_args state dry extensions ignore_exit rules state_manager
-      normalize sources tapversion trap
+      normalize sources tapversion trap width
       statefile
     );
     __PACKAGE__->mk_methods(@ATTR);
@@ -214,6 +214,12 @@ sub process_args {
                 $self->{expand} = $val;
             },
             'poll=s'     => sub { $self->_set_poll( $_[1] ) },
+            'width=s'    => sub {
+                my ( $opt, $val ) = @_;
+                croak '--width expects a non-negative integer'
+                  unless defined $val && $val =~ /\A\d+\z/;
+                $self->{width} = $val;
+            },
             'utf!'       => \$self->{utf},
             'c'          => \$self->{color},
             'D|dry'      => \$self->{dry},
@@ -319,6 +325,9 @@ sub _get_args {
     }
     if ( defined $self->poll ) {
         $args{poll} = $self->poll;
+    }
+    if ( defined $self->width ) {
+        $args{width} = $self->width;
     }
     if ( defined $self->utf ) {
         $args{utf} = $self->utf;
@@ -784,6 +793,8 @@ calling C<run>.
 
 =item C<trap>
 
+=item C<width>
+
 =back
 
 =head2 POLL AND UTF
@@ -794,6 +805,15 @@ integer in milliseconds and defaults to 100ms on a TTY when omitted;
 polling is disabled for non-TTY output unless explicitly set. UTF output
 defaults to enabled; use C<--noutf> to force ASCII. These options are
 CLI-only and are not read from C<HARNESS_OPTIONS>.
+
+=head2 WIDTH
+
+The C<width> attribute is set via C<--width=N>. When specified, output
+width is clamped to a minimum of 28 columns. When omitted, TTY output
+defaults to the current terminal width; non-TTY output derives a width
+from the longest top-level test name plus minimum dot padding and
+trailer length. This option is CLI-only and is not read from
+C<HARNESS_OPTIONS>.
 
 =head1 PLUGINS
 

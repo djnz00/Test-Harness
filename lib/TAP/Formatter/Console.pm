@@ -315,14 +315,32 @@ sub _render_spinner_line {
 sub _name_segments {
     my ( $self, $test ) = @_;
     my $name = $test;
-    my $periods = '.' x ( $self->_longest + 3 - length $test );
-    $periods = " $periods ";
+    my $prefix_len = 0;
+
+    my $effective = $self->_ensure_effective_width($test);
+    my $trailer_len = $self->_max_trailer_len('top');
 
     my @segments;
     if ( $self->timer ) {
+        my $stamp = $self->_format_now();
+        $prefix_len = length($stamp) + 1;
         push @segments,
-          { text => $self->_format_now() . ' ', color => $self->_muted_colors };
+          { text => "$stamp ", color => $self->_muted_colors };
     }
+
+    my $header_prefix_len = $prefix_len + 1;
+    my $allow_truncate
+      = $self->_is_interactive || defined $self->width;
+    if ($allow_truncate) {
+        my $available
+          = $effective - $trailer_len - 3 - $header_prefix_len;
+        $name = $self->_truncate_name( $name, $available );
+    }
+
+    my $header_len = $header_prefix_len + length($name);
+    my $dots = '.' x $self->_dot_count( $header_len, $trailer_len );
+    my $periods = " $dots ";
+
     push @segments, { text => $name, color => $self->_name_color };
     push @segments, { text => $periods, color => $self->_muted_colors };
     return @segments;
@@ -330,13 +348,8 @@ sub _name_segments {
 
 sub _subtest_name_data {
     my ( $self, $state, $depth, $name ) = @_;
-    my $len = length $name;
-    my $longest = $state->{longest};
-    $longest->[$depth] = $len
-      if !defined $longest->[$depth] || $len > $longest->[$depth];
-    my $periods = ' ' . '.' x ( $longest->[$depth] + 3 - $len ) . ' ';
-    my $prefix = ( '  ' x $depth ) . $name;
-    my $text   = $prefix . $periods;
+    my ( $prefix, $periods, $text )
+      = $self->_subtest_name_parts( $depth, $name );
     my @segments = (
         { text => $prefix, color => $self->_name_color },
         { text => $periods, color => $self->_muted_colors },

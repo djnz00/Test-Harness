@@ -74,8 +74,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
 
     chomp(@output);
 
+    my $longest = longest_name("$source_tests/harness");
     my @expected = (
-        "$source_tests/harness ..",
+        header_for( "$source_tests/harness", $longest ),
         '1..1',
         'ok 1 - this is a test',
         $ok_token,
@@ -103,8 +104,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
 
     chomp(@output);
 
+    $longest = longest_name('My Nice Test');
     @expected = (
-        'My Nice Test ..',
+        header_for( 'My Nice Test', $longest ),
         '1..1',
         'ok 1 - this is a test',
         $ok_token,
@@ -134,12 +136,13 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
 
     chomp(@output);
 
+    $longest = longest_name( 'My Nice Test', 'My Nice Test Again' );
     @expected = (
-        'My Nice Test ........',
+        header_for( 'My Nice Test', $longest ),
         '1..1',
         'ok 1 - this is a test',
         $ok_token,
-        'My Nice Test Again ..',
+        header_for( 'My Nice Test Again', $longest ),
         '1..1',
         'ok 1 - this is a test',
         $ok_token,
@@ -163,8 +166,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
       'Run tests with whisper';
 
     chomp(@output);
+    $longest = longest_name("$source_tests/harness");
     @expected = (
-        "$source_tests/harness ..",
+        header_for( "$source_tests/harness", $longest ),
         $ok_token,
         'All tests successful.',
     );
@@ -215,8 +219,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
     my @summary = @output[ 9 .. $#output ];
     @output = @output[ 0 .. 8 ];
 
+    $longest = longest_name("$source_tests/harness_failure");
     @expected = (
-        "$source_tests/harness_failure ..",
+        header_for( "$source_tests/harness_failure", $longest ),
         '1..2',
         'ok 1 - this is a test',
         'not ok 2 - this is another test',
@@ -249,8 +254,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
 
     $status   = pop @output;
     $summary  = pop @output;
+    $longest = longest_name("$source_tests/harness_failure");
     @expected = (
-        "$source_tests/harness_failure ..",
+        header_for( "$source_tests/harness_failure", $longest ),
         'Failed 1/2 subtests',
         'Test Summary Report',
         '-------------------',
@@ -296,8 +302,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
 
     chomp(@output);
 
+    $longest = longest_name("$source_tests/harness_directives");
     @expected = (
-        "$source_tests/harness_directives ..",
+        header_for( "$source_tests/harness_directives", $longest ),
         'not ok 2 - we have a something # TODO some output',
         "ok 3 houston, we don't have liftoff # SKIP no funding",
         $ok_token,
@@ -334,8 +341,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
     $status   = pop @output;
     @summary  = @output[ 6 .. ( $#output - 1 ) ];
     @output   = @output[ 0 .. 5 ];
+    $longest = longest_name("$source_tests/harness_badtap");
     @expected = (
-        "$source_tests/harness_badtap ..",
+        header_for( "$source_tests/harness_badtap", $longest ),
         '1..2',
         'ok 1 - this is a test',
         'not ok 2 - this is another test',
@@ -366,8 +374,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
 
     chomp(@output);
 
+    $longest = longest_name("$source_tests/harness_failure");
     @expected = (
-        "$source_tests/harness_failure ..",
+        header_for( "$source_tests/harness_failure", $longest ),
         'not ok 2 - this is another test',
         'Failed 1/2 subtests',
         'Test Summary Report',
@@ -392,8 +401,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
 
     chomp(@output);
 
+    $longest = longest_name("$sample_tests/no_output");
     @expected = (
-        "$sample_tests/no_output ..",
+        header_for( "$sample_tests/no_output", $longest ),
         'No subtests run',
         'Test Summary Report',
         '-------------------',
@@ -416,8 +426,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
       'Run tests with comments';
     chomp(@output);
 
+    $longest = longest_name("$source_tests/harness_failure");
     @expected = (
-        "$source_tests/harness_failure ..",
+        header_for( "$source_tests/harness_failure", $longest ),
         q{#   Failed test 'this is another test'},
         '#   in harness_failure.t at line 5.',
         q{#          got: 'waffle'},
@@ -447,8 +458,9 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
     delete $ENV{FOO};
     chomp(@output);
 
+    $longest = longest_name("$source_tests/harness_failure");
     @expected = (
-        "$source_tests/harness_failure ..",
+        header_for( "$source_tests/harness_failure", $longest ),
         'not ok 2 - this is another test',
         q{#   Failed test 'this is another test'},
         '#   in harness_failure.t at line 5.',
@@ -470,6 +482,27 @@ ok $ENV{HARNESS_VERSION}, 'HARNESS_VERSION env variable should be set';
     is_deeply \@output, \@expected, '... and the output should be correct';
 
     #XXXX
+}
+
+sub longest_name {
+    my @names = @_;
+    my $longest = 0;
+    for my $name (@names) {
+        my $len = length $name;
+        $longest = $len if $len > $longest;
+    }
+    return $longest;
+}
+
+sub header_for {
+    my ( $name, $longest ) = @_;
+    my $trailer_len = length(' not ok');
+    my $width = $longest + 1 + 3 + $trailer_len;
+    $width = 28 if $width < 28;
+    my $header_len = length($name) + 1;
+    my $dots = $width - $header_len - $trailer_len;
+    $dots = 3 if $dots < 3;
+    return $name . ' ' . ( '.' x $dots );
 }
 
 sub trim {

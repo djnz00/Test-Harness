@@ -53,4 +53,12 @@ sub _should_show_count {
     return 0;
 }
 
+sub _max_trailer_len {
+    my ( $self, $context ) = @_;
+    if ( defined $context && $context eq 'subtest' ) {
+        return length(' not ok');
+    }
+    return $self->SUPER::_max_trailer_len($context);
+}
+
 1;

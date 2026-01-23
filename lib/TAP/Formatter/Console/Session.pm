@@ -122,7 +122,6 @@ sub _closures {
                 max_depth => $expand,
                 parser    => TAP::Formatter::Console::Subtest->new(
                     { max_depth => $expand } ),
-                longest       => [],
                 output_started => 0,
             };
             $self->{_subtest_expand} = $subtest_state;

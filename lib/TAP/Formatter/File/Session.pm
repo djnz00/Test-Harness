@@ -48,6 +48,31 @@ sub result {
         return;
     }
 
+    my $expand = $formatter->expand;
+    if ( $expand && !$formatter->verbose ) {
+        require TAP::Formatter::Console::Subtest;
+        my $state = $self->{_subtest_expand};
+        if ( !$state || $state->{max_depth} != $expand ) {
+            $state = $self->{_subtest_expand} = {
+                max_depth => $expand,
+                parser    => TAP::Formatter::Console::Subtest->new(
+                    { max_depth => $expand } ),
+            };
+        }
+
+        my @events = $state->{parser}->consume_line( $result->raw );
+        for my $event (@events) {
+            next unless $event->{type} eq 'final';
+            my ( undef, undef, $text )
+              = $formatter->_subtest_name_parts(
+                $event->{depth},
+                $event->{name}
+              );
+            my $status = $event->{ok} ? 'ok' : 'not ok';
+            $self->{results} .= $text . $status . "\n";
+        }
+    }
+
     if (!$formatter->quiet
         && (   $formatter->verbose
             || ( $result->is_test && $formatter->failures && !$result->is_ok )
@@ -88,7 +113,13 @@ sub close_test {
         my $time_report = $self->time_report( $formatter, $parser );
         $formatter->_output(
             $pretty . ( $self->{results} ? "\n" . $self->{results} : "" ) );
-        $formatter->_output_success( $self->_make_ok_line($time_report) );
+        if ( $formatter->expand && !$formatter->verbose ) {
+            $formatter->_output_success(
+                $pretty . $self->_make_ok_line($time_report) );
+        }
+        else {
+            $formatter->_output_success( $self->_make_ok_line($time_report) );
+        }
     }
 }
 

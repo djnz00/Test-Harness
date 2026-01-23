@@ -1,0 +1,4 @@
+print <<'LONG_TEST';
+1..1
+ok 1 - long name
+LONG_TEST

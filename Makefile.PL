@@ -18,7 +18,9 @@ my %mm_args = (
     'test' => { 'TESTS' => 't/*.t t/compat/*.t' },
 
     'EXE_FILES'    => ['bin/prove'],
-    'PREREQ_PM'    => {},
+    'PREREQ_PM'    => {
+        'Term::ReadKey' => 0,
+    },
     'META_MERGE'   => {
         resources => {
             homepage   => 'http://testanything.org/',

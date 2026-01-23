@@ -23,6 +23,12 @@ BEGIN {
         expand     => sub { shift; shift },
         poll       => sub { shift; shift },
         utf        => sub { shift; shift },
+        width      => sub {
+            my ( $self, $width ) = @_;
+            $self->_croak("option 'width' expects a non-negative integer")
+              unless defined $width && $width =~ /\A\d+\z/;
+            return $width;
+        },
         stdout     => sub {
             my ( $self, $ref ) = @_;
 
@@ -50,6 +56,8 @@ BEGIN {
       _longest
       _printed_summary_header
       _colorizer
+      _effective_width
+      _width_source
     );
 
     __PACKAGE__->mk_methods( @getter_setters, keys %VALIDATION_FOR );
@@ -238,23 +246,208 @@ sub prepare {
     }
 
     $self->_longest($longest);
+    $self->_effective_width( $self->_resolve_width(@tests) );
 }
 
 sub _format_now { strftime "[%H:%M:%S]", localtime }
 
+sub _min_width { 28 }
+
+sub _terminal_columns {
+    my $self = shift;
+
+    require Term::ReadKey;
+    my ($cols) = Term::ReadKey::GetTerminalSize( $self->stdout );
+    return $cols if defined $cols && $cols =~ /\A\d+\z/;
+
+    return $ENV{COLUMNS}
+      if defined $ENV{COLUMNS} && $ENV{COLUMNS} =~ /\A\d+\z/;
+
+    return;
+}
+
+sub _clamp_width {
+    my ( $self, $width ) = @_;
+    my $min = $self->_min_width;
+    return $width < $min ? $min : $width;
+}
+
+sub _count_trailer_enabled {
+    my $self = shift;
+    return 0 unless $self->show_count;
+    return 0 if $self->verbose;
+    return $self->_is_interactive;
+}
+
+sub _max_trailer_len {
+    my ( $self, $context ) = @_;
+    if ( defined $context && $context eq 'subtest' ) {
+        my $count_len  = length(' MMMM/NNNN');
+        my $status_len = $self->utf ? length(' ✓') : length(' not ok');
+        return $count_len > $status_len ? $count_len : $status_len;
+    }
+
+    my $status_len = length(' not ok');
+    my $count_len  = 0;
+    if ( $self->_count_trailer_enabled ) {
+        $count_len = length(' MMMM/NNNN');
+    }
+
+    return $count_len > $status_len ? $count_len : $status_len;
+}
+
+sub _dot_count {
+    my ( $self, $header_len, $trailer_len ) = @_;
+    my $width = $self->_effective_width;
+    $width = $self->_min_width unless defined $width;
+    my $dots = $width - $header_len - $trailer_len;
+    $dots = 3 if $dots < 3;
+    return $dots;
+}
+
+sub _truncate_name {
+    my ( $self, $name, $max_len ) = @_;
+    return $name unless defined $max_len;
+    return $name if $max_len < 8;
+    return $name if length $name <= $max_len;
+    return substr( $name, 0, $max_len - 3 ) . '...';
+}
+
+sub _subtest_name_parts {
+    my ( $self, $depth, $name ) = @_;
+
+    my $indent = '  ' x $depth;
+    my $effective = $self->_ensure_effective_width();
+    my $trailer_len = $self->_max_trailer_len('subtest');
+
+    my $header_prefix_len = length($indent) + 1;
+    my $available
+      = $effective - $trailer_len - 3 - $header_prefix_len;
+    $name = $self->_truncate_name( $name, $available );
+
+    my $header_len = $header_prefix_len + length($name);
+    my $dots = '.' x $self->_dot_count( $header_len, $trailer_len );
+    my $periods = " $dots ";
+    my $prefix = $indent . $name;
+    my $text = $prefix . $periods;
+
+    return ( $prefix, $periods, $text );
+}
+
+sub _default_width_for_longest {
+    my ( $self, $longest ) = @_;
+    $longest ||= 0;
+    my $header_len = $longest + 1;
+    my $width
+      = $header_len + 3 + $self->_max_trailer_len('top');
+    return $self->_clamp_width($width);
+}
+
+sub _resolve_width {
+    my ( $self, @tests ) = @_;
+    if ( defined( my $width = $self->width ) ) {
+        $self->_width_source('width');
+        return $self->_clamp_width($width);
+    }
+
+    if ( $self->_is_interactive ) {
+        my $cols = $self->_terminal_columns;
+        if ( defined $cols ) {
+            $self->_width_source('terminal');
+            return $self->_clamp_width($cols);
+        }
+    }
+
+    my $longest = 0;
+    for my $test (@tests) {
+        my $len = length $test;
+        $longest = $len if $len > $longest;
+    }
+
+    $self->_width_source('computed');
+    return $self->_default_width_for_longest($longest);
+}
+
+sub _ensure_effective_width {
+    my ( $self, $test ) = @_;
+    if ( defined( my $width = $self->width ) ) {
+        my $effective = $self->_clamp_width($width);
+        $self->_effective_width($effective)
+          unless defined $self->_effective_width;
+        $self->_width_source('width') unless $self->_width_source;
+        return $self->_effective_width;
+    }
+
+    if ( $self->_is_interactive ) {
+        return $self->_effective_width if defined $self->_effective_width;
+
+        my $cols = $self->_terminal_columns;
+        if ( defined $cols ) {
+            my $effective = $self->_clamp_width($cols);
+            $self->_effective_width($effective);
+            $self->_width_source('terminal');
+            return $effective;
+        }
+
+        my $longest = $self->_longest || 0;
+        if ( defined $test ) {
+            my $len = length $test;
+            $longest = $len if $len > $longest;
+            $self->_longest($longest);
+        }
+        my $effective = $self->_default_width_for_longest($longest);
+        $self->_effective_width($effective)
+          unless defined $self->_effective_width;
+        $self->_width_source('computed') unless $self->_width_source;
+        return $self->_effective_width;
+    }
+
+    my $longest = $self->_longest || 0;
+    if ( defined $test ) {
+        my $len = length $test;
+        $longest = $len if $len > $longest;
+        $self->_longest($longest);
+    }
+    my $candidate = $self->_default_width_for_longest($longest);
+    if ( !defined $self->_effective_width
+        || $candidate > $self->_effective_width )
+    {
+        $self->_effective_width($candidate);
+        $self->_width_source('computed');
+    }
+
+    return $self->_effective_width;
+}
+
 sub _format_name {
     my ( $self, $test ) = @_;
     my $name = $test;
-    my $periods = '.' x ( $self->_longest + 2 - length $test );
-    $periods = " $periods ";
+    my $prefix = '';
+    my $prefix_len = 0;
+
+    my $effective = $self->_ensure_effective_width($test);
+    my $trailer_len = $self->_max_trailer_len('top');
 
     if ( $self->timer ) {
         my $stamp = $self->_format_now();
-        return "$stamp $name$periods";
+        $prefix     = "$stamp ";
+        $prefix_len = length($stamp) + 1;
     }
-    else {
-        return "$name$periods";
+
+    my $header_prefix_len = $prefix_len + 1;
+    my $allow_truncate
+      = $self->_is_interactive || defined $self->width;
+    if ($allow_truncate) {
+        my $available
+          = $effective - $trailer_len - 3 - $header_prefix_len;
+        $name = $self->_truncate_name( $name, $available );
     }
+
+    my $header_len = $header_prefix_len + length($name);
+    my $dots = '.' x $self->_dot_count( $header_len, $trailer_len );
+    my $periods = " $dots ";
+
+    return $prefix . $name . $periods;
 
 }
 

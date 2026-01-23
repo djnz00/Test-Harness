@@ -8,8 +8,6 @@ use Carp;
 
 use base 'TAP::Formatter::Console::Session';
 
-use constant WIDTH => 72;    # Because Eric says
-
 my %shared;
 
 sub _initialize {
@@ -91,16 +89,27 @@ sub tick {
     $self->_output_ruler( 1, 1 );
 }
 
+sub _ruler_width {
+    my $self = shift;
+    my $formatter = $self->formatter;
+    my $width = $formatter->_effective_width;
+    if ( !defined $width ) {
+        $width = $formatter->_resolve_width;
+        $formatter->_effective_width($width);
+    }
+    return $width;
+}
+
 sub _clear_ruler {
     my $self = shift;
-    $self->formatter->_output( "\r" . ( ' ' x WIDTH ) . "\r" );
+    my $width = $self->_ruler_width;
+    $self->formatter->_output( "\r" . ( ' ' x $width ) . "\r" );
 }
 
 my $now = 0;
 my $start;
 
-my $trailer     = '... )===';
-my $chop_length = WIDTH - length $trailer;
+my $trailer = '... )===';
 
 sub _output_ruler {
     my ( $self, $refresh, $advance_spinner ) = @_;
@@ -125,11 +134,20 @@ sub _output_ruler {
     chop $ruler;    # Remove a trailing space
     $ruler .= ')===';
 
-    if ( length $ruler > WIDTH ) {
-        $ruler =~ s/(.{$chop_length}).*/$1$trailer/o;
+    my $width = $self->_ruler_width;
+    my $chop_length = $width - length $trailer;
+    $chop_length = 0 if $chop_length < 0;
+
+    if ( length $ruler > $width ) {
+        if ($chop_length) {
+            $ruler =~ s/(.{$chop_length}).*/$1$trailer/o;
+        }
+        else {
+            $ruler = substr( $trailer, 0, $width );
+        }
     }
     else {
-        $ruler .= '=' x ( WIDTH - length($ruler) );
+        $ruler .= '=' x ( $width - length($ruler) );
     }
     my $spinner = '';
     if ( $formatter->poll && $formatter->_is_interactive ) {
@@ -172,7 +190,6 @@ sub _expand_subtest {
             max_depth => $expand,
             parser    => TAP::Formatter::Console::Subtest->new(
                 { max_depth => $expand } ),
-            longest => [],
             output_started => 0,
         };
     }
