@@ -450,7 +450,17 @@ sub _closures {
             }
 
             return unless $show_count && !$subtest_output_started;
-            return unless defined $last_progress_text;
+            if ( !defined $last_progress_text ) {
+                my $tail = $plan && $plan ne '/? ' ? $plan : '';
+                my $text = $pretty_text . $tail;
+                $last_progress_text = $text;
+                $last_progress_tail = $tail;
+                $render_line->(
+                    $text, $spinner, \$last_progress_len,
+                    \@pretty_segments, $tail
+                );
+                return;
+            }
 
             $render_line->(
                 $last_progress_text, $spinner, \$last_progress_len,

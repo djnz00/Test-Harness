@@ -501,7 +501,10 @@ result of an interrupted test run.
 sub summary {
     my ( $self, $aggregate, $interrupted ) = @_;
 
-    return if $self->silent;
+    if ( $self->silent ) {
+        $self->_show_cursor if $self->can('_show_cursor');
+        return;
+    }
 
     my @t     = $aggregate->descriptions;
     my $tests = \@t;
@@ -635,6 +638,8 @@ sub _output_summary_failure {
             $self->$output( sprintf "$spaces%s\n" => shift @results );
         }
     }
+
+    $self->_show_cursor if $self->can('_show_cursor');
 }
 
 sub _summary_test_header {

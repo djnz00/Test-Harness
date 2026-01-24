@@ -80,11 +80,15 @@ sub tick {
     my $formatter = $self->formatter;
     my $context = $shared{$formatter} || return;
 
-    return unless $context->{ruler_active};
     return unless $formatter->poll && $formatter->_is_interactive;
 
     my $active = $context->{active} || [];
     return unless @$active && $active->[0] == $self;
+
+    if ( @$active == 1 ) {
+        $self->SUPER::tick;
+        return;
+    }
 
     $self->_output_ruler( 1, 1 );
 }
