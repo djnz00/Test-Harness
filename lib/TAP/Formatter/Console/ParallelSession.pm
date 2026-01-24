@@ -97,7 +97,7 @@ sub _ruler_width {
         $width = $formatter->_resolve_width;
         $formatter->_effective_width($width);
     }
-    return $width;
+    return $width - 1;
 }
 
 sub _clear_ruler {

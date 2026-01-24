@@ -349,23 +349,16 @@ sub _resolve_width {
         $longest = $len if $len > $longest;
     }
 
-    if ( $self->_is_interactive ) {
-        my $cols = $self->_terminal_columns;
-        if ( defined $cols ) {
-            if ( !$self->expand ) {
-                my $computed = $self->_default_width_for_longest($longest);
-		if ($computed < $cols) {
-		    $self->_width_source('computed');
-		    return $self->_clamp_width($computed);
-		}
-            }
-            $self->_width_source('terminal');
-            return $self->_clamp_width($cols);
-        }
+    my $width = $self->_default_width_for_longest($longest);
+    my $source = 'computed';
+    my $cols = $self->_is_interactive ? $self->_terminal_columns : undef;
+    if ( defined $cols && ( $self->expand || $width >= $cols ) ) {
+        $width  = $cols;
+        $source = 'terminal';
     }
 
-    $self->_width_source('computed');
-    return $self->_default_width_for_longest($longest);
+    $self->_width_source($source);
+    return $self->_clamp_width($width);
 }
 
 sub _ensure_effective_width {
@@ -378,56 +371,49 @@ sub _ensure_effective_width {
         return $self->_effective_width;
     }
 
-    if ( $self->_is_interactive ) {
-        return $self->_effective_width if defined $self->_effective_width;
-
-        my $cols = $self->_terminal_columns;
-        if ( defined $cols ) {
-            if ( !$self->expand ) {
-                my $longest = $self->_longest || 0;
-                if ( defined $test ) {
-                    my $len = length $test;
-                    $longest = $len if $len > $longest;
-                    $self->_longest($longest);
-                }
-                my $computed = $self->_default_width_for_longest($longest);
-                my $width = $cols < $computed ? $cols : $computed;
-                my $effective = $self->_clamp_width($width);
-                $self->_effective_width($effective);
-                $self->_width_source(
-                      $width == $computed
-                    ? 'computed'
-                    : 'terminal'
-                );
-                return $effective;
-            }
-
-            my $effective = $self->_clamp_width($cols);
-            $self->_effective_width($effective);
-            $self->_width_source('terminal');
-            return $effective;
-        }
-
+    my $longest_for = sub {
         my $longest = $self->_longest || 0;
         if ( defined $test ) {
             my $len = length $test;
             $longest = $len if $len > $longest;
             $self->_longest($longest);
         }
-        my $effective = $self->_default_width_for_longest($longest);
-        $self->_effective_width($effective)
-          unless defined $self->_effective_width;
+        return $longest;
+    };
+
+    if ( $self->_is_interactive ) {
+        return $self->_effective_width if defined $self->_effective_width;
+
+        my $cols = $self->_terminal_columns;
+        if ( defined $cols ) {
+            if ( $self->expand ) {
+                my $effective = $self->_clamp_width($cols);
+                $self->_effective_width($effective);
+                $self->_width_source('terminal');
+                return $effective;
+            }
+
+            my $computed
+              = $self->_default_width_for_longest( $longest_for->() );
+            my $width = $cols < $computed ? $cols : $computed;
+            my $effective = $self->_clamp_width($width);
+            $self->_effective_width($effective);
+            $self->_width_source(
+                  $width == $computed
+                ? 'computed'
+                : 'terminal'
+            );
+            return $effective;
+        }
+
+        my $effective
+          = $self->_default_width_for_longest( $longest_for->() );
+        $self->_effective_width($effective);
         $self->_width_source('computed') unless $self->_width_source;
-        return $self->_effective_width;
+        return $effective;
     }
 
-    my $longest = $self->_longest || 0;
-    if ( defined $test ) {
-        my $len = length $test;
-        $longest = $len if $len > $longest;
-        $self->_longest($longest);
-    }
-    my $candidate = $self->_default_width_for_longest($longest);
+    my $candidate = $self->_default_width_for_longest( $longest_for->() );
     if ( !defined $self->_effective_width
         || $candidate > $self->_effective_width )
     {
