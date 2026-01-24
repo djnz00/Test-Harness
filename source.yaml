@@ -1,0 +1,9 @@
+files:
+  - lib/**/*.pm
+  - smoke/**/*.pl
+  - reference/**/*.pm
+  - benchmark/**/*.pl
+  - t/**/*.pm
+  - t/**/*.pl
+  - examples/**/*.pm
+  - examples/**/*.pl

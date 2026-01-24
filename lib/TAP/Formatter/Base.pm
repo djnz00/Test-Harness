@@ -216,7 +216,7 @@ tests are running.
 
 =item * C<expand>
 
-Integer value.  If true, expands subtests in console output to the given
+Integer value.  If true, expands subtests in output to the given
 maximum depth.
 
 =back
