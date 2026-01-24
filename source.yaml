@@ -1,4 +1,5 @@
 files:
+  - bin/*
   - lib/**/*.pm
   - smoke/**/*.pl
   - reference/**/*.pm
