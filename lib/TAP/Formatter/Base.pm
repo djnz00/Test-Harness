@@ -354,13 +354,10 @@ sub _resolve_width {
         if ( defined $cols ) {
             if ( !$self->expand ) {
                 my $computed = $self->_default_width_for_longest($longest);
-                my $width = $cols < $computed ? $cols : $computed;
-                $self->_width_source(
-                      $width == $computed
-                    ? 'computed'
-                    : 'terminal'
-                );
-                return $self->_clamp_width($width);
+		if ($computed < $cols) {
+		    $self->_width_source('computed');
+		    return $self->_clamp_width($computed);
+		}
             }
             $self->_width_source('terminal');
             return $self->_clamp_width($cols);

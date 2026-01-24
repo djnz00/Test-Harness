@@ -112,7 +112,7 @@ my $start;
 my $trailer = '... )===';
 
 sub _output_ruler {
-    my ( $self, $refresh, $advance_spinner ) = @_;
+    my ( $self, $refresh, $advance_spinner, $suppress_spinner ) = @_;
     my $new_now = time;
     return if $new_now == $now and !$refresh;
     $now = $new_now;
@@ -150,7 +150,8 @@ sub _output_ruler {
         $ruler .= '=' x ( $width - length($ruler) );
     }
     my $spinner = '';
-    if ( $formatter->poll && $formatter->_is_interactive ) {
+    if ( !$suppress_spinner && $formatter->poll && $formatter->_is_interactive )
+    {
         my $frames = $formatter->_spinner_frames;
         if (@$frames) {
             if ($advance_spinner) {
@@ -198,32 +199,26 @@ sub _expand_subtest {
     return unless @events;
 
     for my $event (@events) {
+        # Avoid noisy, interleaved progress lines in parallel output.
+        next if $event->{type} eq 'progress';
         my $depth = $event->{depth};
         my $name  = $event->{name};
         my ( $pretty, $name_segments )
           = $formatter->_subtest_name_data( $state, $depth, $name );
-        my $text
-          = $event->{type} eq 'progress'
-          ? $pretty . $event->{run} . '/' . $event->{planned}
-          : $pretty . $formatter->_status_token( $event->{ok} );
 
         if ( $context->{ruler_active} ) {
+            $self->_output_ruler( 1, 0, 1 );
             $formatter->_output("\n");
             $context->{ruler_active} = 0;
         }
-        if ( $event->{type} eq 'final' ) {
-            my $status = $formatter->_status_token( $event->{ok} );
-            my $color  = $event->{ok}
-              ? $formatter->_success_color
-              : $formatter->_failure_color;
-            $formatter->_render_segments(
-                @{$name_segments},
-                { text => $status, color => $color },
-            );
-        }
-        else {
-            $formatter->_output($text);
-        }
+        my $status = $formatter->_status_token( $event->{ok} );
+        my $color  = $event->{ok}
+          ? $formatter->_success_color
+          : $formatter->_failure_color;
+        $formatter->_render_segments(
+            @{$name_segments},
+            { text => $status, color => $color },
+        );
         $formatter->_output("\n");
         $state->{output_started} = 1;
     }
