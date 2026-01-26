@@ -1,4 +1,4 @@
-# Test-Harness 3.24
+# Test-Harness 4.01
 
 This is a fork of the original Test-Harness with the following changes:
 - times displayed in milliseconds
