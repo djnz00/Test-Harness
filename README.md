@@ -9,6 +9,8 @@ This is a fork of the original Test-Harness with the following changes:
   - reduced default poll interval (override with --poll=N)
   - unicode output (disable with --noutf)
 
+![colored output](./assets/screenshot.png)
+
 ## Installation
 
 To install Test::Harness using ExtUtils::MakeMaker do:
