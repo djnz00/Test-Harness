@@ -123,9 +123,11 @@ sub make_iterator {
 
     push @command, @{ $source->test_args || [] };
 
+    my $stderr = $source->stderr;
     return $class->iterator_class->new(
         {   command => \@command,
-            merge   => $source->merge
+            merge   => $source->merge,
+            ( defined $stderr ? ( stderr => $stderr ) : () ),
         }
     );
 }

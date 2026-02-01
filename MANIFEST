@@ -131,6 +131,7 @@ t/parser-subclass.t
 t/perl5lib.t
 t/premature-bailout.t
 t/process.t
+t/process-stderr.t
 t/prove.t
 t/proverc.t
 t/proverc/emptyexec

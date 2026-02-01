@@ -27,6 +27,7 @@ our $VERSION = '4.01';
   $source->raw( \'reference to raw TAP source' )
          ->config( \%config )
          ->merge( $boolean )
+         ->stderr( $handler )
          ->switches( \@switches )
          ->test_args( \@args )
          ->assemble_meta;
@@ -109,6 +110,15 @@ See L</config_for> for more info.
 Chaining getter/setter for the flag that dictates whether STDOUT and STDERR
 should be merged (where appropriate).  Defaults to undef.
 
+=head3 C<stderr>
+
+  my $handler = $source->stderr;
+  $source->stderr( $handler );
+
+Chaining getter/setter for an optional STDERR handler or filehandle. When
+set, process-based sources will relay STDERR through this handler instead of
+printing directly to STDERR.
+
 =head3 C<switches>
 
   my $switches = $source->switches;
@@ -156,6 +166,13 @@ sub merge {
     my $self = shift;
     return $self->{merge} unless @_;
     $self->{merge} = shift;
+    return $self;
+}
+
+sub stderr {
+    my $self = shift;
+    return $self->{stderr} unless @_;
+    $self->{stderr} = shift;
     return $self;
 }
 

@@ -251,11 +251,13 @@ sub _run {
 sub _create_iterator {
     my ( $class, $source, $command, $setup, $teardown ) = @_;
 
+    my $stderr = $source->stderr;
     return TAP::Parser::Iterator::Process->new(
         {   command  => $command,
             merge    => $source->merge,
             setup    => $setup,
             teardown => $teardown,
+            ( defined $stderr ? ( stderr => $stderr ) : () ),
         }
     );
 }

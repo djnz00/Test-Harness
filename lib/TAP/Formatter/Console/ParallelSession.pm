@@ -335,4 +335,19 @@ sub close_test {
     }
 }
 
+sub stderr_output {
+    my ( $self, $chunk ) = @_;
+    return unless defined $chunk && length $chunk;
+    my $formatter = $self->formatter;
+    my $context   = $shared{$formatter};
+
+    if ( $context && $context->{ruler_active} ) {
+        $self->_finalize_ruler_line($context);
+        print STDERR $chunk;
+        return;
+    }
+
+    return $self->SUPER::stderr_output($chunk);
+}
+
 1;

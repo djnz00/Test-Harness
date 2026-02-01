@@ -8,7 +8,8 @@ use base 'TAP::Formatter::Session';
 my @ACCESSOR;
 
 BEGIN {
-    my @CLOSURE_BINDING = qw( header result clear_for_close close_test tick );
+    my @CLOSURE_BINDING
+      = qw( header result clear_for_close close_test tick stderr_output );
 
     for my $method (@CLOSURE_BINDING) {
         no strict 'refs';
@@ -195,6 +196,27 @@ sub _closures {
         return 0
           unless defined $last_progress_len || defined $last_progress_text;
         $finalize_progress_line->();
+        return 1;
+    };
+
+    my $finalize_subtest_progress = sub {
+        return 0 unless $subtest_state && $subtest_state->{progress_active};
+        my $text = $subtest_state->{last_text} || '';
+        my $len  = length $text;
+        my $pad  = '';
+        if ( defined $subtest_state->{last_len}
+            && $len < $subtest_state->{last_len} )
+        {
+            $pad = ' ' x ( $subtest_state->{last_len} - $len );
+        }
+        $formatter->_render_spinner_line(
+            text => $text,
+            pad  => $pad,
+        );
+        $formatter->_output("\n");
+        $subtest_state->{last_len}        = undef;
+        $subtest_state->{last_text}       = undef;
+        $subtest_state->{progress_active} = 0;
         return 1;
     };
 
@@ -461,6 +483,15 @@ sub _closures {
                 $last_progress_text, $spinner, \$last_progress_len,
                 \@pretty_segments, $last_progress_tail
             );
+        },
+
+        stderr_output => sub {
+            my ($chunk) = @_;
+            return unless defined $chunk && length $chunk;
+            my $finalized = $finalize_subtest_progress->();
+            $finalized ||= $finalize_progress_if_needed->();
+            $newline_printed = 1 if $finalized;
+            print STDERR $chunk;
         },
     };
 }

@@ -28,6 +28,7 @@ our $VERSION = '4.01';
   my %args = (
    command  => ['python', 'setup.py', 'test'],
    merge    => 1,
+   stderr   => \&stderr_handler,
    setup    => sub { ... },
    teardown => sub { ... },
   );
@@ -50,11 +51,16 @@ Create an iterator.  Expects one argument containing a hashref of the form:
 
    command  => \@command_to_execute
    merge    => $attempt_merge_stderr_and_stdout?
+   stderr   => $stderr_handler_or_fh?
    setup    => $callback_to_setup_command
    teardown => $callback_to_teardown_command
 
 Tries to uses L<IPC::Open3> & L<IO::Select> to communicate with the spawned
 process if they are available.  Falls back onto C<open()>.
+
+If C<stderr> is provided as a code reference or filehandle, STDERR output
+from the process will be sent to that handler instead of being printed
+directly.
 
 =head2 Instance Methods
 
@@ -112,11 +118,33 @@ sub _use_open3 {
 
 # new() implementation supplied by TAP::Object
 
+sub _is_filehandle {
+    my ($ref) = @_;
+    return 0 if !defined $ref;
+    return 1 if ref $ref eq 'GLOB';
+    return 1 if !ref $ref && ref \$ref eq 'GLOB';
+    return 1 if eval { $ref->can('print') };
+    return 0;
+}
+
 sub _initialize {
     my ( $self, $args ) = @_;
 
     my @command = @{ delete $args->{command} || [] }
       or die "Must supply a command to execute";
+
+    my $stderr_handler = delete $args->{stderr_handler};
+    $stderr_handler = delete $args->{stderr}
+      unless defined $stderr_handler;
+    if ( defined $stderr_handler ) {
+        if ( ref $stderr_handler eq 'CODE' ) {
+            $self->{stderr_handler} = $stderr_handler;
+        }
+        elsif ( _is_filehandle($stderr_handler) ) {
+            $self->{stderr_handler}
+              = sub { print { $stderr_handler } @_ };
+        }
+    }
 
     $self->{command} = [@command];
 
@@ -249,7 +277,12 @@ sub _next {
                             $sel->remove($fh);
                         }
                         elsif ( $fh == $err ) {
-                            print STDERR $chunk;    # echo STDERR
+                            if ( my $handler = $self->{stderr_handler} ) {
+                                $handler->($chunk);
+                            }
+                            else {
+                                print STDERR $chunk;    # echo STDERR
+                            }
                         }
                         else {
                             $chunk   = $partial . $chunk;
@@ -377,4 +410,3 @@ L<TAP::Parser>,
 L<TAP::Parser::Iterator>,
 
 =cut
-

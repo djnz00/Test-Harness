@@ -850,7 +850,7 @@ should be set higher.
 ##############################################################################
 
 sub _get_parser_args {
-    my ( $self, $job ) = @_;
+    my ( $self, $job, $stderr_handler ) = @_;
     my $test_prog = $job->filename;
     my %args      = ();
 
@@ -862,6 +862,7 @@ sub _get_parser_args {
     $args{switches}    = \@switches;
     $args{spool}       = $self->_open_spool($test_prog);
     $args{merge}       = $self->merge;
+    $args{stderr}      = $stderr_handler if $stderr_handler;
     $args{ignore_exit} = $self->ignore_exit;
     $args{version}     = $self->version if $self->version;
 
@@ -913,12 +914,25 @@ overridden in subclasses.
 sub make_parser {
     my ( $self, $job ) = @_;
 
-    my $args = $self->_get_parser_args($job);
+    my $stderr_delegate;
+    my $stderr_handler = sub {
+        if ($stderr_delegate) {
+            $stderr_delegate->(@_);
+        }
+        else {
+            print STDERR @_;
+        }
+    };
+
+    my $args = $self->_get_parser_args( $job, $stderr_handler );
     $self->_make_callback( 'parser_args', $args, $job->as_array_ref );
     my $parser = $self->_construct( $self->parser_class, $args );
 
     $self->_make_callback( 'made_parser', $parser, $job->as_array_ref );
     my $session = $self->formatter->open_test( $job->description, $parser );
+    if ( $session->can('stderr_output') ) {
+        $stderr_delegate = sub { $session->stderr_output(@_) };
+    }
 
     return ( $parser, $session );
 }

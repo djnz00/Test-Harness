@@ -84,7 +84,7 @@ package main;
       unless $probe && $probe_tty && -t $probe_tty;
 }
 
-plan tests => 14;
+plan tests => 16;
 
 sub capture_output {
     my ($code) = @_;
@@ -237,6 +237,22 @@ my $directive_output = capture_output(
 );
 like $directive_output, qr/\nok 4 - todo # TODO/,
   'directive output finalizes progress line before printing';
+
+my $stderr_capture = '';
+my $stderr_output = capture_output(
+    sub {
+        local *STDERR;
+        open STDERR, '>', \$stderr_capture or die $!;
+        my ( $session, undef, undef, $pty ) = make_session(
+            formatter => { poll => 10, utf => 0, color => 0 },
+        );
+        $session->result( FakeResult->new(1) );
+        $session->stderr_output("diag line\n");
+    }
+);
+like $stderr_output, qr/\r\Q$test_name\E.*1\/1.*\n\z/,
+  'stderr output finalizes progress line before printing';
+is $stderr_capture, "diag line\n", 'stderr output preserved';
 
 my $parallel_output = capture_output(
     sub {

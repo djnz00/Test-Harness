@@ -255,6 +255,14 @@ allow exact synchronization.
 Subtleties of this behavior may be platform-dependent and may change in
 the future.
 
+=item * C<stderr>
+
+Optional filehandle or code reference to receive data read from STDERR when
+running process-based sources. If omitted, STDERR is relayed to the harness
+process as before.
+If C<merge> is true, STDERR is merged into STDOUT and this handler is not
+used.
+
 =item * C<grammar_class>
 
 This option was introduced to let you easily customize which I<grammar> class
@@ -431,6 +439,7 @@ sub make_result           { shift->result_factory_class->make_result(@_); }
         my $sources     = delete $args{sources};
         my $exec        = delete $args{exec};
         my $merge       = delete $args{merge};
+        my $stderr      = delete $args{stderr};
         my $spool       = delete $args{spool};
         my $switches    = delete $args{switches};
         my $ignore_exit = delete $args{ignore_exit};
@@ -467,7 +476,7 @@ sub make_result           { shift->result_factory_class->make_result(@_); }
 
         if ( $source->raw ) {
             my $src_factory = $self->make_iterator_factory($sources);
-            $source->merge($merge)->switches($switches)
+            $source->merge($merge)->stderr($stderr)->switches($switches)
               ->test_args($test_args);
             $iterator = $src_factory->make_iterator($source);
         }

@@ -54,6 +54,7 @@ BEGIN {
                             ],
                             setup    => \'CODE',
                             teardown => \'CODE',
+                            stderr   => \'CODE',
 
                         }
                     ]
@@ -177,4 +178,3 @@ for my $test (@SCHEDULE) {
     #     }
     # );
 }
-
