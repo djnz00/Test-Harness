@@ -49,17 +49,24 @@ use TAP::Formatter::Console::Session;
     package FakeResult;
 
     sub new {
-        my ( $class, $number ) = @_;
-        return bless { number => $number }, $class;
+        my ( $class, $number, %args ) = @_;
+        return bless {
+            number       => $number,
+            ok           => exists $args{ok} ? $args{ok} : 1,
+            is_test      => exists $args{is_test} ? $args{is_test} : 1,
+            is_comment   => $args{is_comment}   || 0,
+            has_directive => $args{has_directive} || 0,
+            raw          => $args{raw} || '',
+        }, $class;
     }
 
     sub is_bailout    {0}
-    sub is_test       {1}
+    sub is_test       { return shift->{is_test} }
     sub number        { return shift->{number} }
-    sub is_ok         {1}
-    sub is_comment    {0}
-    sub has_directive {0}
-    sub raw           { return '' }
+    sub is_ok         { return shift->{ok} }
+    sub is_comment    { return shift->{is_comment} }
+    sub has_directive { return shift->{has_directive} }
+    sub raw           { return shift->{raw} }
 }
 
 package main;
@@ -76,7 +83,7 @@ package main;
       unless $probe && $probe_tty && -t $probe_tty;
 }
 
-plan tests => 10;
+plan tests => 13;
 
 sub capture_output {
     my ($code) = @_;
@@ -98,19 +105,34 @@ sub make_tty_handle {
 
 my $test_name = 't/sample.t';
 
+sub make_session {
+    my (%args) = @_;
+    my $formatter_args = $args{formatter} || {};
+    my $session_args   = $args{session} || {};
+    my $parser_args    = $args{parser} || {};
+    my $use_colorizer  = delete $formatter_args->{_colorizer};
+
+    my ( $pty, $tty ) = make_tty_handle();
+    my $formatter = TAP::Formatter::Console->new(
+        { stdout => $tty, %{$formatter_args} } );
+    $formatter->_colorizer( Colorizer->new ) if $use_colorizer;
+    $formatter->prepare($test_name);
+    my $parser = FakeParser->new(%{$parser_args});
+    my $session = TAP::Formatter::Console::Session->new(
+        {   name      => $test_name,
+            formatter => $formatter,
+            parser    => $parser,
+            %{$session_args},
+        }
+    );
+    return ( $session, $parser, $formatter, $pty );
+}
+
 my $utf_output = capture_output(
     sub {
-        my ( $pty, $tty ) = make_tty_handle();
-        my $formatter = TAP::Formatter::Console->new(
-            { stdout => $tty, show_count => 0, utf => 1 } );
-        $formatter->prepare($test_name);
-        my $parser = FakeParser->new();
-        my $session = TAP::Formatter::Console::Session->new(
-            {   name       => $test_name,
-                formatter  => $formatter,
-                parser     => $parser,
-                show_count => 0,
-            }
+        my ( $session, undef, undef, $pty ) = make_session(
+            formatter => { show_count => 0, utf => 1 },
+            session   => { show_count => 0 },
         );
         $session->close_test;
     }
@@ -119,17 +141,9 @@ like $utf_output, qr/\x{2713}/, 'UTF checkmark appears on TTY';
 
 my $ascii_output = capture_output(
     sub {
-        my ( $pty, $tty ) = make_tty_handle();
-        my $formatter = TAP::Formatter::Console->new(
-            { stdout => $tty, show_count => 0, utf => 0 } );
-        $formatter->prepare($test_name);
-        my $parser = FakeParser->new();
-        my $session = TAP::Formatter::Console::Session->new(
-            {   name       => $test_name,
-                formatter  => $formatter,
-                parser     => $parser,
-                show_count => 0,
-            }
+        my ( $session, undef, undef, $pty ) = make_session(
+            formatter => { show_count => 0, utf => 0 },
+            session   => { show_count => 0 },
         );
         $session->close_test;
     }
@@ -138,17 +152,8 @@ like $ascii_output, qr/\bok\b/, 'ASCII ok appears with --noutf';
 
 my $spinner_output = capture_output(
     sub {
-        my ( $pty, $tty ) = make_tty_handle();
-        my $formatter = TAP::Formatter::Console->new(
-            { stdout => $tty, poll => 10, utf => 1 } );
-        $formatter->_colorizer( Colorizer->new );
-        $formatter->prepare($test_name);
-        my $parser = FakeParser->new();
-        my $session = TAP::Formatter::Console::Session->new(
-            {   name      => $test_name,
-                formatter => $formatter,
-                parser    => $parser,
-            }
+        my ( $session, undef, undef, $pty ) = make_session(
+            formatter => { poll => 10, utf => 1, _colorizer => 1 },
         );
         $session->result( FakeResult->new(1) );
         $session->tick;
@@ -164,25 +169,85 @@ ok @seen >= 2, 'spinner frames advance on tick';
 like $spinner_output, qr/\[\[(?:bright_white|white)\]\]/,
   'spinner uses bright white when color is enabled';
 
+my $failure_output = capture_output(
+    sub {
+        my ( $session, undef, undef, $pty ) = make_session(
+            formatter => { poll => 10, utf => 0, color => 0, failures => 1 },
+        );
+        $session->result(
+            FakeResult->new( 1, ok => 0, raw => 'not ok 1 - fail' ) );
+    }
+);
+like $failure_output, qr/\r[^\n]*\r[^\n]*\nnot ok 1 - fail/,
+  'failure output finalizes progress line before printing';
+
+my $comment_output = capture_output(
+    sub {
+        my ( $session, undef, undef, $pty ) = make_session(
+            formatter => { poll => 10, utf => 1, color => 0, comments => 1 },
+        );
+        $session->result( FakeResult->new( 1, ok => 1, raw => 'ok 1 - ok' ) );
+        $session->result(
+            FakeResult->new(
+                0,
+                is_test    => 0,
+                is_comment => 1,
+                raw        => '# Subtest: first'
+            )
+        );
+        $session->result( FakeResult->new( 2, ok => 1, raw => 'ok 2 - ok' ) );
+        $session->result(
+            FakeResult->new(
+                0,
+                is_test    => 0,
+                is_comment => 1,
+                raw        => '# Subtest: second'
+            )
+        );
+    }
+);
+like $comment_output, qr/\n# Subtest: second/,
+  'comment output finalizes progress line before printing';
+
+my $directive_output = capture_output(
+    sub {
+        my ( $session, undef, undef, $pty ) = make_session(
+            formatter => { poll => 10, utf => 1, color => 0, directives => 1 },
+        );
+        $session->result( FakeResult->new( 1, ok => 1, raw => 'ok 1 - ok' ) );
+        $session->result(
+            FakeResult->new(
+                2,
+                is_test       => 1,
+                has_directive => 1,
+                raw           => 'ok 2 - todo # TODO'
+            )
+        );
+        $session->result( FakeResult->new( 3, ok => 1, raw => 'ok 3 - ok' ) );
+        $session->result(
+            FakeResult->new(
+                4,
+                is_test       => 1,
+                has_directive => 1,
+                raw           => 'ok 4 - todo # TODO'
+            )
+        );
+    }
+);
+like $directive_output, qr/\nok 4 - todo # TODO/,
+  'directive output finalizes progress line before printing';
+
 my $color_output = capture_output(
     sub {
-        my ( $pty, $tty ) = make_tty_handle();
-        my $formatter = TAP::Formatter::Console->new(
-            { stdout => $tty, timer => 1, utf => 1 } );
-        $formatter->_colorizer( Colorizer->new );
-        $formatter->prepare($test_name);
-        my $parser = FakeParser->new(
-            start_time  => 0,
-            end_time    => 0.0014,
-            start_times => [ 0, 0, 0, 0 ],
-            end_times   => [ 0.0014, 0.0016, 0, 0 ],
-        );
-        my $session = TAP::Formatter::Console::Session->new(
-            {   name       => $test_name,
-                formatter  => $formatter,
-                parser     => $parser,
-                show_count => 0,
-            }
+        my ( $session, $parser, undef, $pty ) = make_session(
+            formatter => { timer => 1, utf => 1, _colorizer => 1 },
+            session   => { show_count => 0 },
+            parser    => {
+                start_time  => 0,
+                end_time    => 0.0014,
+                start_times => [ 0, 0, 0, 0 ],
+                end_times   => [ 0.0014, 0.0016, 0, 0 ],
+            },
         );
         $session->close_test;
     }

@@ -26,11 +26,11 @@ TAP::Formatter::Console::Session - Harness output delegate for default console o
 
 =head1 VERSION
 
-Version 3.51_01
+Version 4.01
 
 =cut
 
-our $VERSION = '3.51_01';
+our $VERSION = '4.01';
 
 =head1 DESCRIPTION
 
@@ -191,6 +191,13 @@ sub _closures {
         $last_progress_tail = undef;
     };
 
+    my $finalize_progress_if_needed = sub {
+        return 0
+          unless defined $last_progress_len || defined $last_progress_text;
+        $finalize_progress_line->();
+        return 1;
+    };
+
     my $subtest_name_data = sub {
         my ( $depth, $name ) = @_;
         return $formatter->_subtest_name_data( $subtest_state, $depth, $name );
@@ -204,12 +211,8 @@ sub _closures {
 
     my $start_subtest_output = sub {
         unless ($newline_printed) {
-            if ( defined $last_progress_len || defined $last_progress_text ) {
-                $finalize_progress_line->();
-            }
-            else {
-                $formatter->_output("\n");
-            }
+            $finalize_progress_if_needed->()
+              or $formatter->_output("\n");
             $newline_printed = 1;
         }
         $subtest_output_started = 1;
@@ -351,10 +354,12 @@ sub _closures {
                     || ( $directives && $result->has_directive ) )
               )
             {
-                unless ($newline_printed) {
+                if ( !$finalize_progress_if_needed->()
+                    && !$newline_printed )
+                {
                     $formatter->_output("\n");
-                    $newline_printed = 1;
                 }
+                $newline_printed = 1;
                 $output_result->($result);
                 $formatter->_output("\n");
             }

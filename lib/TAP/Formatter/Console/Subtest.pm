@@ -11,11 +11,11 @@ TAP::Formatter::Console::Subtest - Parse subtest TAP for console expansion
 
 =head1 VERSION
 
-Version 3.51_01
+Version 4.01
 
 =cut
 
-our $VERSION = '3.51_01';
+our $VERSION = '4.01';
 
 sub _initialize {
     my ( $self, $arg_for ) = @_;
