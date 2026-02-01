@@ -31,6 +31,7 @@ sub _create_shared_context {
         tests         => 0,
         fails         => 0,
         ruler_active  => 0,
+        ruler_text    => undef,
         spinner_index => 0,
     };
 }
@@ -111,6 +112,17 @@ my $start;
 
 my $trailer = '... )===';
 
+sub _finalize_ruler_line {
+    my ( $self, $context ) = @_;
+    return unless $context->{ruler_active};
+    my $ruler = $context->{ruler_text};
+    if ( defined $ruler && length $ruler ) {
+        $self->formatter->_render_spinner_line( text => $ruler );
+    }
+    $self->formatter->_output("\n");
+    $context->{ruler_active} = 0;
+}
+
 sub _output_ruler {
     my ( $self, $refresh, $advance_spinner ) = @_;
     my $new_now = time;
@@ -171,6 +183,7 @@ sub _output_ruler {
     else {
         $formatter->_render_spinner_line( text => $ruler );
     }
+    $context->{ruler_text} = $ruler;
     $context->{ruler_active} = 1;
 }
 
@@ -207,10 +220,7 @@ sub _expand_subtest {
           ? $pretty . $event->{run} . '/' . $event->{planned}
           : $pretty . $formatter->_status_token( $event->{ok} );
 
-        if ( $context->{ruler_active} ) {
-            $formatter->_output("\n");
-            $context->{ruler_active} = 0;
-        }
+        $self->_finalize_ruler_line($context);
         if ( $event->{type} eq 'final' ) {
             my $status = $formatter->_status_token( $event->{ok} );
             my $color  = $event->{ok}

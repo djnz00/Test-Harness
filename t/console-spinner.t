@@ -8,6 +8,7 @@ use Test::More;
 eval { require IO::Pty; 1 } or plan skip_all => 'IO::Pty not installed';
 
 use TAP::Formatter::Console;
+use TAP::Formatter::Console::ParallelSession;
 use TAP::Formatter::Console::Session;
 
 {
@@ -83,7 +84,7 @@ package main;
       unless $probe && $probe_tty && -t $probe_tty;
 }
 
-plan tests => 13;
+plan tests => 14;
 
 sub capture_output {
     my ($code) = @_;
@@ -236,6 +237,38 @@ my $directive_output = capture_output(
 );
 like $directive_output, qr/\nok 4 - todo # TODO/,
   'directive output finalizes progress line before printing';
+
+my $parallel_output = capture_output(
+    sub {
+        my ( $pty, $tty ) = make_tty_handle();
+        my $formatter = TAP::Formatter::Console->new(
+            { stdout => $tty, poll => 10, utf => 1, expand => 1 } );
+        $formatter->prepare($test_name);
+        my $parser_a = FakeParser->new( tests_planned => 2, tests_run => 1 );
+        my $parser_b = FakeParser->new( tests_planned => 2, tests_run => 1 );
+        my $session_a = TAP::Formatter::Console::ParallelSession->new(
+            {   name      => $test_name,
+                formatter => $formatter,
+                parser    => $parser_a,
+            }
+        );
+        my $session_b = TAP::Formatter::Console::ParallelSession->new(
+            {   name      => $test_name,
+                formatter => $formatter,
+                parser    => $parser_b,
+            }
+        );
+        $session_a->result( FakeResult->new( 1, raw => '# Subtest: foo' ) );
+        $session_a->result(
+            FakeResult->new( 0, is_test => 0, raw => '    1..2' ) );
+        $session_a->result(
+            FakeResult->new( 0, is_test => 0, raw => '    ok 1 - ok' ) );
+        $session_a->close_test;
+        $session_b->close_test;
+    }
+);
+like $parallel_output, qr/\r===[^\r\n]*=\n  foo\b/m,
+  'parallel ruler finalizes before subtest output';
 
 my $color_output = capture_output(
     sub {
